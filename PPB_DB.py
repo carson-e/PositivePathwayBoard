@@ -1,140 +1,118 @@
 import sqlite3 as sq
 import pandas as pd
-import string
-import traceback
-import sys
 
-def connect_db(db_name):        #Connects to roster.db, creates the db if one doesnt exist
+def connect_db(db_name):
+
+    conn = sq.connect(db_name)
+    cur = conn.cursor()
+
+    return conn, cur
+
+
+# def build_table(conn = None, cur = None):
+#     close_conn = False
+#     if conn is None and cur is None:
+#         conn, cur = connect_db('roster.db')
+#         close_conn = True
+#     cur.execute("CREATE TABLE IF NOT EXISTS roster(id INTEGER PRIMARY KEY AUTOINCREMENT, fname TEXT NOT NULL, lname TEXT NOT NULL, p1_email TEXT, p2_email text, class_num INTEGER NOT NULL)")
+#     conn.commit()
+#     #res = cur.execute("SELECT * FROM sqlite_master")
+#     #res.fetchall()
+#     if close_conn:
+#         conn.close()
+#     #print(res)
+
+def load_df(filepath):
+    """Loads all sheets from an Excel file and processes them."""
     try:
-        conn = sq.connect(db_name)
-        cur = conn.cursor()
-        return conn, cur
-    except Exception as e:
-        print("Error connecting to database:")
-        traceback.print_exc()
-        raise e
+        # Load all sheets into a dictionary of DataFrames
+        roster_full = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
 
+        # Load teacher data from the first sheet
+        teacherData = pd.read_excel(filepath, usecols='G:J', header=0, sheet_name=0)
 
-def build_table(conn=None, cur=None):        #creates roster table in roster.db if doesnt already exist,
-    close_conn = False                       #built to handle its own connections so there are no memory leaks
-    try:
-        if conn is None and cur is None:
-            conn, cur = connect_db('roster.db')        #connects to db, conn and cur needed to pass objects in
-            close_conn = True
-                                                        #cur is what you use to actually pass objects in
-        cur.execute("""                        
-            CREATE TABLE IF NOT EXISTS roster(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fname TEXT NOT NULL,
-                lname TEXT NOT NULL,
-                p1_email TEXT,
-                p2_email TEXT,
-                class_num INTEGER NOT NULL
-            )
-        """)
-        conn.commit()                                #have to commit changes to the db after
-    except Exception as e:
-        print("Error building table:")
-        traceback.print_exc()
-        raise e
-    finally:
-        if close_conn:                    #closes own connection
-            conn.close()
+        # --- THIS IS THE FIX ---
+        # Create a new dictionary to store the processed DataFrames
+        roster_processed = {}
+        
+        # Loop through the original dictionary
+        for sheet_name, df in roster_full.items():
+            print(f"Processing sheet: {sheet_name}")
+            
+            # Drop the columns from the individual DataFrame (df)
+            # and store it in the new dictionary
+            columns_to_drop = ['Teacher Name', 'Grade', 'Room Number']
+            
+            # Check if columns exist before trying to drop them to avoid errors
+            existing_cols_to_drop = [col for col in columns_to_drop if col in df.columns]
+            if existing_cols_to_drop:
+                roster_processed[sheet_name] = df.drop(columns=existing_cols_to_drop)
+                print(f"  Dropped columns: {existing_cols_to_drop}")
+            else:
+                roster_processed[sheet_name] = df
+                print("  No columns to drop.")
+                
+            print("  Data processed successfully.")
+            print(roster_processed[sheet_name].head())
+        # --- END OF FIX ---
 
-
-def load_df(filepath):                #loads and preprocesses excel sheet, sheet itself has underwent changes
-    try:
-        roster = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
-        teacherData = pd.read_excel(filepath, usecols='G:J', header=0, sheet_name=0)    #teacher data in different df, not currently used
-
-        for sheet_name, df in roster.items():        #since eventually i want to read in multiple sheets for each class, this is built to read in roster
-            classNum = sheet_name.split(' ')[1]      #if it is a dictionary of sheets. <- This line reads the sheet name and pulls the class number from it
-            df = df.dropna(subset=["Student Name"])    #drops empty entries
-            df[["fname", "lname"]] = df["Student Name"].str.split(' ', n=1, expand=True)        #inserts two new columns, splitting the Student Name column for db
-
-            print(f"Sheet name: {sheet_name}")
-            print("Data loaded successfully.")
-            df.rename(columns={"Parent 1 Email": "p1_email", "Parent 2 Email": "p2_email"}, inplace=True)       #renames cols for db
-            df["class_num"] = classNum
-            df = df[["fname", "lname", "p1_email", "p2_email", "class_num"]]    #drops photo, parent names for now
-            print(df.head())
-
-            roster[sheet_name] = df
-
-        print("Teacher Data:\n", teacherData.head())
-        return roster, teacherData
+        print("\nTeacher Data:\n", teacherData.head())
+        
+        # Return the new dictionary with the processed DataFrames
+        return roster_processed, teacherData
 
     except FileNotFoundError:
         print(f"File not found: {filepath}")
-        traceback.print_exc()
-        return None, None
-    except ImportError as e:
-        print(e)
         return None, None
     except Exception as e:
-        print("Error occurred while loading Excel file:")
-        traceback.print_exc()
+        print(f"An error occurred: {e}")
         return None, None
 
+def populate_db(db_name, data, conn=None, cur=None):
+    """Populates the database with data from a dictionary of DataFrames."""
+    close_end = False
+    if conn is None and cur is None:
+        conn, cur = connect_db(db_name)
+        close_end = True
 
+    if isinstance(data, dict):
+        for sheet_name, df in data.items():
+            print(f"Inserting data from sheet into table: {sheet_name}")
+            
+            # Recommendation: Use 'replace' to avoid duplicating data
+            # if you run the script multiple times.
+            # 'append' will just add the same data again.
+            df.to_sql(sheet_name, conn, if_exists='replace', index=False)
+            
+    else:
+        # This part might not be needed if 'data' is always a dict
+        print(f"Inserting data into table: {db_name}")
+        data.to_sql(db_name, conn, if_exists='replace', index=False)
 
-def populate_db(db_name, data, conn=None, cur=None):       #fills DB, does not really work rn
-    close_end = False                                      #has issues either with connecting or filling or something idk
-    try:
-        if conn is None and cur is None:
-            conn, cur = connect_db(db_name)
-            close_end = True
+    conn.commit()
+    print("\nDatabase populated successfully.")
 
-        if isinstance(data, dict):
-            inserted = 0
-            for sheets, df in data.items():
-                for _, row in df.iterrows():       #inserts data into df 
-                    cur.execute("""
-                        INSERT INTO roster (fname, lname, p1_email, p2_email, class_num)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (row['fname'], row['lname'], row['p1_email'], row['p2_email'], row['class_num']))    # Question marks are to protect against SQL Injection
-                    inserted += 1
+    if close_end:
+        conn.close()
 
-            conn.commit()
-            return inserted
-        else:
-            print("No data to populate (data is not a dict). Skipping population.")
-            return 0
-
-    except Exception as e:
-        print("Error occurred while populating database:")
-        traceback.print_exc()
-        raise e
-    finally:
-        if close_end:
-            conn.close()
 
 
 if __name__ == "__main__":
-    try:
-        build_table()
-        data, teacherData = load_df('StdInfo.xlsx')
-        if data is None:
-            print("Data could not be loaded. Exiting.")
-            sys.exit(1)
+    
+    # build_table()
+    data, teacherData = load_df('StdInfo.xlsx')
 
-        conn, cur = connect_db('roster.db')
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        print("Tables:", cur.fetchall())
-        conn.close()
+    conn, cur = connect_db('roster.db')
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    print(cur.fetchall())
+    conn.close()
 
-        inserted = populate_db('roster.db', data)
-        print(f"Inserted rows: {inserted}")
+    populate_db('roster.db', data)
 
-        conn, cur = connect_db('roster.db')
-        cur.execute('SELECT * FROM roster')
-        rows = cur.fetchall()
-        for row in rows:
-            print(row)
+    # conn, cur = connect_db('roster.db')
+    # cur.execute('DROP table roster')
+    # rows = cur.fetchall()
+    # for row in rows:
+    #     print(row)
 
-        conn.close()
-
-    except Exception as e:
-        print("Fatal error in main execution:")
-        traceback.print_exc()
-        sys.exit(1)
+    conn.close()
