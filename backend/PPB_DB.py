@@ -25,6 +25,12 @@ def connect_db(db_name):
 def load_df(filepath):
     """Loads all sheets from an Excel file and processes them."""
     try:
+        # Load all sheets into a dictionary of DataFrames
+        # roster_full = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
+
+        # Load teacher data from the first sheet
+        # teacherData = pd.read_excel(filepath, usecols='G:J', header=0, sheet_name=0)
+
         # First, try to load with original column spec (A:I)
         try:
             roster_full = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
@@ -45,6 +51,7 @@ def load_df(filepath):
                     df.columns = col_names[:len(df.columns)]
                     roster_full[sheet_name] = df
 
+        # --- THIS IS THE FIX ---
         # Create a new dictionary to store the processed DataFrames
         roster_processed = {}
         
@@ -67,6 +74,7 @@ def load_df(filepath):
                 
             print("  Data processed successfully.")
             print(roster_processed[sheet_name].head())
+        # --- END OF FIX ---
 
         print("\nTeacher Data:\n", teacherData.head() if not teacherData.empty else "No teacher data")
         

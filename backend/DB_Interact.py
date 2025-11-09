@@ -101,4 +101,4 @@ if __name__ == "__main__":
     # data, teacherData = load_df('StdInfo.xlsx') # Assuming load_df exists
     # if data:
     #     populate_db('roster.db', data) # Assuming populate_db exists
-    #     print("Database populated.")
+    #     print("Database populated.") 
