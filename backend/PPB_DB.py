@@ -54,16 +54,20 @@ def load_df(filepath):
         # --- THIS IS THE FIX ---
         # Create a new dictionary to store the processed DataFrames
         roster_processed = {}
-        
+        teacher_info = {"Teacher Name": None, "Grade": None}
+
         # Loop through the original dictionary
         for sheet_name, df in roster_full.items():
             print(f"Processing sheet: {sheet_name}")
-            
+
+            # Extract Teacher Name and Grade from the first row if present
+            if 'Teacher Name' in df.columns:
+                teacher_info["Teacher Name"] = df['Teacher Name'].iloc[0]
+            if 'Grade' in df.columns:
+                teacher_info["Grade"] = df['Grade'].iloc[0]
+
             # Drop the columns from the individual DataFrame (df)
-            # and store it in the new dictionary
             columns_to_drop = ['Teacher Name', 'Grade', 'Room Number']
-            
-            # Check if columns exist before trying to drop them to avoid errors
             existing_cols_to_drop = [col for col in columns_to_drop if col in df.columns]
             if existing_cols_to_drop:
                 roster_processed[sheet_name] = df.drop(columns=existing_cols_to_drop)
@@ -71,22 +75,23 @@ def load_df(filepath):
             else:
                 roster_processed[sheet_name] = df
                 print("  No columns to drop.")
-                
+
             print("  Data processed successfully.")
             print(roster_processed[sheet_name].head())
         # --- END OF FIX ---
 
         print("\nTeacher Data:\n", teacherData.head() if not teacherData.empty else "No teacher data")
-        
-        # Return the new dictionary with the processed DataFrames
-        return roster_processed, teacherData
+        print("Teacher Info:", teacher_info)
+
+        # Return the new dictionary with the processed DataFrames and teacher info
+        return roster_processed, teacherData, teacher_info
 
     except FileNotFoundError:
         print(f"File not found: {filepath}")
-        return None, None
+        return None, None, None
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None, None
+        return None, None, None
 
 def populate_db(db_name, data, conn=None, cur=None):
     """Populates the database with data from a dictionary of DataFrames."""
