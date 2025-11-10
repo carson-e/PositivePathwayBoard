@@ -46,6 +46,12 @@ pip install -r requirements.txt
 setenv ROSTER_EXCEL "/absolute/path/to/your_roster.xlsx"
 ```
 
+OR (for bash)
+
+```bash
+export ROSTER_EXCEL="/absolute/path/to/your_roster.xlsx"
+```
+
 4) Start the API server:
 
 ```tcsh
@@ -72,15 +78,21 @@ Notes:
 npm install
 ```
 
-2) Tell the frontend where the backend lives (defaults to `http://127.0.0.1:8000` if not set). For tcsh:
+2) Tell the frontend where the backend lives (defaults to `http://127.0.0.1:8000` if not set).
 
 ```tcsh
 setenv EXPO_PUBLIC_API_URL "http://127.0.0.1:8000"
 ```
 
+OR (for bash)
+
+```bash
+export EXPO_PUBLIC_API_URL="http://127.0.0.1:8000"
+```
+
 3) Start the web dev server (either):
 
-```tcsh
+```bash
 # Option A: Expo CLI
 npx expo start --web
 
@@ -102,6 +114,13 @@ Set them with tcsh:
 ```tcsh
 setenv ROSTER_EXCEL "/absolute/path/to/your_roster.xlsx"
 setenv EXPO_PUBLIC_API_URL "http://127.0.0.1:8000"
+```
+
+OR (for bash)
+
+```bash
+export ROSTER_EXCEL="/absolute/path/to/your_roster.xlsx"
+export EXPO_PUBLIC_API_URL="http://127.0.0.1:8000"
 ```
 
 ## Troubleshooting
