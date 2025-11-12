@@ -18,8 +18,11 @@ from typing import Dict, List, Tuple
 class ReportGenerator:
     """Generate student behavioral progress reports"""
     
-    def __init__(self, db_path: str = 'roster.db'):
+    def __init__(self, db_path: str = None):
         """Initialize report generator with database connection"""
+        if db_path is None:
+            # Default to roster.db in the same directory as this script
+            db_path = os.path.join(os.path.dirname(__file__), 'roster.db')
         self.db_path = db_path
         self.conn = None
         self.styles = getSampleStyleSheet()
@@ -291,8 +294,8 @@ Sincerely,<br/>
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize generator
-    generator = ReportGenerator('roster.db')
+    # Initialize generator (uses backend/roster.db by default)
+    generator = ReportGenerator()
     
     # Example behavior data (you would normally get this from your tracking system)
     behavior_data_dict = {
@@ -322,9 +325,12 @@ if __name__ == "__main__":
     
     character_equations = ["Integrity", "Respect", "Responsibility"]
     
+    # Set output directory relative to this script
+    output_dir = os.path.join(os.path.dirname(__file__), 'reports')
+    
     # Generate reports for all students
     generator.generate_all_reports(
-        output_dir='./reports',
+        output_dir=output_dir,
         behavior_data_dict=behavior_data_dict,
         month='November',
         character_equations=character_equations
