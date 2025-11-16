@@ -65,6 +65,9 @@ export default function PathwayBoard() {
 	const [selectedChoice, setSelectedChoice] = useState<string>('');
 	const [showSettings, setShowSettings] = useState(false);
 	const [updatingRoster, setUpdatingRoster] = useState(false);
+	const [generatingReport, setGeneratingReport] = useState(false);
+	const [selectedStudentForReport, setSelectedStudentForReport] = useState<string>('');
+	const [showReportDialog, setShowReportDialog] = useState(false);
 	const [loadingStudents, setLoadingStudents] = useState(false);
 
 	// Fetch students from backend
@@ -168,6 +171,23 @@ export default function PathwayBoard() {
 
 	const isPositiveChoice = (choice: string) => choice.startsWith('+');
 
+	const recordTap = async (studentName: string, choice: string) => {
+	const tapType = isPositiveChoice(choice) ? 'positive' : 'negative';
+	try {
+		await fetch(`${API_URL}/taps/record`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				student_name: studentName,
+				tap_type: tapType,
+				choice: choice
+			})
+		});
+	} catch (err) {
+		console.warn('Failed to record tap:', err);
+	}
+	};
+
 	const handleChoiceClick = (choice: string) => {
 		if (selectedChoice === choice) {
 			setSelectedChoice('');
@@ -188,6 +208,12 @@ export default function PathwayBoard() {
 					recentChoice: selectedChoice,
 				}))
 			);
+
+			students.forEach(student => {
+				if (student.name !== 'Photo Name' && !student.name.startsWith('Student ')) {
+				recordTap(student.name, selectedChoice);
+				}
+			});
 
 			setTimeout(() => {
 				setStudents((prev) =>
@@ -214,6 +240,12 @@ export default function PathwayBoard() {
 						: s
 				)
 			);
+
+			// Record tap for this student
+			const student = students.find(s => s.id === studentId);
+			if (student && student.name !== 'Photo Name' && !student.name.startsWith('Student ')) {
+				recordTap(student.name, selectedChoice);
+			}
 
 			setTimeout(() => {
 				setStudents((prev) =>
@@ -409,6 +441,67 @@ export default function PathwayBoard() {
 		}
 	};
 
+		const generateReport = async () => {
+		if (!selectedStudentForReport) {
+			Alert.alert('No Student Selected', 'Please select a student to generate a report for.');
+			return;
+		}
+	
+		setGeneratingReport(true);
+		try {
+			const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long' });
+			const currentYear = new Date().getFullYear();
+		
+			const monthIndex = new Date().getMonth();
+			const monthConfig = monthlyEquations[monthIndex];
+			const characterEquations = [
+				monthConfig.trait1.replace('+ ', ''),
+				monthConfig.trait2.replace('+ ', ''),
+				monthConfig.result
+			].filter(t => t);
+		
+			const res = await fetch(`${API_URL}/reports/generate`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					student_name: selectedStudentForReport,
+					month: currentMonth,
+					year: currentYear,
+					character_equations: characterEquations.length > 0 ? characterEquations : undefined
+				})
+			});
+		
+			if (!res.ok) {
+				const error = await res.json();
+				throw new Error(error.detail || 'Report generation failed');
+			}
+		
+			const result = await res.json();
+			Alert.alert(
+				'Report Generated!',
+				`Report for ${result.student_name} has been created successfully.\\n\\nFilename: ${result.filename}`,
+				[
+					{
+						text: 'Download',
+						onPress: () => {
+							const downloadUrl = `${API_URL}/reports/download/${result.filename}`;
+							if (typeof window !== 'undefined') {
+								window.open(downloadUrl, '_blank');
+							}
+						}
+					},
+					{ text: 'OK' }
+				]
+			);
+			setShowReportDialog(false);
+			setSelectedStudentForReport('');
+		} catch (err: any) {
+			Alert.alert('Report Generation Failed', err.message || 'Unknown error occurred');
+		} finally {
+			setGeneratingReport(false);
+		}
+	};
+
 	return (
 		<SafeAreaView style={styles.safeArea}>
 			<ScrollView contentContainerStyle={styles.container}>
@@ -469,9 +562,86 @@ export default function PathwayBoard() {
 										{updatingRoster ? 'Updating Roster…' : 'Update Roster'}
 									</Text>
 								</Pressable>
+
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Report Generation</Text>
+								<Pressable
+									onPress={() => setShowReportDialog(true)}
+									style={({ pressed }) => [
+									styles.settingsActionButton,
+									{ backgroundColor: '#2d5aa8' },
+									pressed && styles.pressed,
+									]}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
+										Generate Student Report
+									</Text>
+								</Pressable>
+
 								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.7, marginTop: 6 }]}> 
 									Backend: {API_URL}
 								</Text>
+							</View>
+						</View>
+					</View>
+				)}
+
+					{/* Report Generation Dialog */}
+					{showReportDialog && (
+						<View style={styles.settingsOverlay}>
+							<View style={styles.settingsPopup}>
+								<View style={styles.settingsHeader}>
+									<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Generate Report</Text>
+									<Pressable onPress={() => { setShowReportDialog(false); setSelectedStudentForReport(''); }} style={styles.closeButton}>
+										<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
+									</Pressable>
+								</View>
+								<View style={styles.settingsContent}>
+									<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}>
+									Select a student to generate their behavioral progress report:
+									</Text>
+				
+									<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+										{students
+											.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
+											.map((student) => (
+												<Pressable
+													key={student.id}
+													onPress={() => setSelectedStudentForReport(student.name)}
+													style={({ pressed }) => [
+														styles.studentListItem,
+														selectedStudentForReport === student.name && styles.studentListItemSelected,
+														pressed && styles.pressed,
+													]}
+												>
+													<Text style={[
+														styles.studentListItemText,
+														{ fontSize: headerFontSize * 0.8 },
+														selectedStudentForReport === student.name && styles.studentListItemTextSelected
+													]}>
+														{student.name}
+													</Text>
+													{selectedStudentForReport === student.name && (
+														<Text style={[styles.studentListItemCheck, { fontSize: headerFontSize * 1.2 }]}>✓</Text>
+													)}
+												</Pressable>
+											))
+										}
+									</ScrollView>
+				
+									<Pressable
+										onPress={generateReport}
+										disabled={!selectedStudentForReport || generatingReport}
+										style={({ pressed }) => [
+											styles.settingsActionButton,
+											{ marginTop: 15, backgroundColor: '#2d5aa8' },
+											(!selectedStudentForReport || generatingReport) && styles.settingsActionButtonDisabled,
+											pressed && selectedStudentForReport && !generatingReport && styles.pressed,
+										]}
+									>
+										<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
+											{generatingReport ? 'Generating Report…' : 'Generate Report'}
+										</Text>
+									</Pressable>
 							</View>
 						</View>
 					</View>
@@ -948,5 +1118,34 @@ const styles = StyleSheet.create({
 	},
 	pressed: {
 		opacity: 0.7,
+	},
+	studentListScroll: {
+		maxHeight: 300,
+		borderWidth: 2,
+		borderColor: '#000',
+		borderRadius: 8,
+		backgroundColor: '#f5f5f5',
+	},
+	studentListItem: {
+		padding: 12,
+		borderBottomWidth: 1,
+		borderBottomColor: '#ddd',
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		alignItems: 'center',
+	},
+	studentListItemSelected: {
+		backgroundColor: '#2d5aa8',
+	},
+	studentListItemText: {
+		color: '#000',
+		fontWeight: '600',
+	},
+	studentListItemTextSelected: {
+		color: '#fff',
+	},
+	studentListItemCheck: {
+		color: '#fff',
+		fontWeight: '700',
 	},
 });
