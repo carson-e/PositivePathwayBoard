@@ -102,14 +102,14 @@ async def get_students(limit: int = 500):
 @app.post("/taps/record")
 async def record_tap(tap: TapRecord):
     """Record a single tap interaction"""
-    tracker = TapTracker()
+    tracker = TapTracker(db_path=DB_NAME)
     tap_id = tracker.record_tap(tap.student_name, tap.tap_type, tap.choice)
     return {"status": "ok", "tap_id": tap_id}
 
 @app.post("/taps/batch")
 async def record_taps_batch(batch: TapBatch):
     """Record multiple tap interactions at once"""
-    tracker = TapTracker()
+    tracker = TapTracker(db_path=DB_NAME)
     tap_dicts = [{"student_name": t.student_name, "tap_type": t.tap_type, "choice": t.choice} for t in batch.taps]
     tap_ids = tracker.record_multiple_taps(tap_dicts)
     return {"status": "ok", "tap_ids": tap_ids, "count": len(tap_ids)}
@@ -117,14 +117,14 @@ async def record_taps_batch(batch: TapBatch):
 @app.get("/taps/student/{student_name}")
 async def get_student_taps(student_name: str, month: Optional[str] = None, year: Optional[int] = None):
     """Get tap summary for a specific student"""
-    tracker = TapTracker()
+    tracker = TapTracker(db_path=DB_NAME)
     data = tracker.get_taps_for_student(student_name, month, year)
     return data
 
 @app.get("/taps/all")
 async def get_all_taps(month: Optional[str] = None, year: Optional[int] = None):
     """Get tap data for all students"""
-    tracker = TapTracker()
+    tracker = TapTracker(db_path=DB_NAME)
     data = tracker.get_all_students_taps(month, year)
     return data
 
@@ -132,7 +132,7 @@ async def get_all_taps(month: Optional[str] = None, year: Optional[int] = None):
 async def generate_report(request: GenerateReportRequest):
     """Generate a PDF report for a student"""
     # Get tap data for the student
-    tracker = TapTracker()
+    tracker = TapTracker(db_path=DB_NAME)
     month = request.month or datetime.now().strftime("%B")
     year = request.year or datetime.now().year
     
