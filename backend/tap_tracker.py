@@ -15,7 +15,7 @@ class TapTracker:
     def __init__(self, db_path: str = None):
         """Initialize tap tracker with database connection"""
         if db_path is None:
-            db_path = os.path.join(os.path.dirname(__file__), 'taps.db')
+            db_path = os.path.join(os.path.dirname(__file__), 'roster.db')
         self.db_path = db_path
         self._init_database()
     

@@ -8,4 +8,5 @@ expo-env.d.ts
 node_modules/
 backend/.venv
 node_modules
-backend/__pychache__
+backend/__pycache__
+backend/reports
