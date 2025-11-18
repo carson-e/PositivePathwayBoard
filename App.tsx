@@ -65,30 +65,78 @@ export default function PathwayBoard() {
 	const [selectedChoice, setSelectedChoice] = useState<string>('');
 	const [showSettings, setShowSettings] = useState(false);
 	const [updatingRoster, setUpdatingRoster] = useState(false);
+	const [populatingRoster, setPopulatingRoster] = useState(false);
 	const [generatingReport, setGeneratingReport] = useState(false);
 	const [selectedStudentForReport, setSelectedStudentForReport] = useState<string>('');
 	const [showReportDialog, setShowReportDialog] = useState(false);
+	const [showClassDialog, setShowClassDialog] = useState(false);
 	const [loadingStudents, setLoadingStudents] = useState(false);
+	const [availableTables, setAvailableTables] = useState<string[]>([]);
+	const [selectedTable, setSelectedTable] = useState<string>('Sheet1');
 
-	// Fetch students from backend
-	const fetchStudents = async () => {
+	// Fetch available class tables from backend
+	const fetchAvailableTables = async () => {
+		try {
+			const res = await fetch(`${API_URL}/students?limit=1`);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			
+			// Extract unique table names
+			const tables = [...new Set(data.map((item: any) => item.sheet))] as string[];
+			setAvailableTables(tables);
+			
+			// Set first table as default if not already set
+			if (tables.length > 0 && !selectedTable) {
+				setSelectedTable(tables[0]);
+			}
+		} catch (err) {
+			console.warn('Failed to load available tables:', err);
+		}
+	};
+
+	// Fetch students from backend and load their tap data
+	const fetchStudents = async (tableFilter?: string) => {
 		setLoadingStudents(true);
+		const targetTable = tableFilter || selectedTable;
 		try {
 			const res = await fetch(`${API_URL}/students?limit=33`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
+			
+			// Filter by selected table
+			const filteredData = data.filter((item: any) => item.sheet === targetTable);
+			
 			// Map backend student rows to UI Student type
-			const backendStudents = data.map((item: any, idx: number) => ({
-				id: idx + 1,
-				name: item.row?.fname
-					? item.row.fname
-					: item.row?.['Student Name']
-						? item.row['Student Name']
-						: item.row?.name || `Student ${idx + 1}`,
-				choices: [],
-				points: 0,
-				selected: false,
-			}));
+			const backendStudents = await Promise.all(
+				filteredData.map(async (item: any, idx: number) => {
+					const studentName = item.row?.fname
+						? item.row.fname
+						: item.row?.['Student Name']
+							? item.row['Student Name']
+							: item.row?.name || `Student ${idx + 1}`;
+					
+					// Fetch tap data for this student
+					let points = 0;
+					try {
+						const tapRes = await fetch(`${API_URL}/taps/student/${encodeURIComponent(studentName)}`);
+						if (tapRes.ok) {
+							const tapData = await tapRes.json();
+							points = (tapData.positive_taps || 0) - (tapData.negative_taps || 0);
+						}
+					} catch (err) {
+						console.warn(`Failed to load taps for ${studentName}:`, err);
+					}
+					
+					return {
+						id: idx + 1,
+						name: studentName,
+						choices: [],
+						points: points,
+						selected: false,
+					};
+				})
+			);
+			
 			// Pad or trim to 33 students
 			const paddedStudents = Array.from({ length: 33 }, (_, i) => 
 				backendStudents[i] || {
@@ -408,14 +456,39 @@ export default function PathwayBoard() {
 		return rows;
 	};
 
-	// Trigger roster update on the backend and refresh students
+	// Refresh displayed data from existing database (student names, teacher info, and tap points)
 	const updateRoster = async () => {
 		if (updatingRoster) return;
 		setUpdatingRoster(true);
+		try {
+			// Fetch fresh student data and their tap points
+			await fetchStudents();
+			
+			// Fetch teacher info from backend metadata table
+			const teacherRes = await fetch(`${API_URL}/teacher-info`);
+			if (teacherRes.ok) {
+				const teacherData = await teacherRes.json();
+				setTeacherName(teacherData.teacher_name || teacherName);
+				setClassGrade(teacherData.grade || classGrade);
+			}
+			
+			Alert.alert('Roster Refreshed', 'Student data and tap information have been reloaded from the database.');
+		} catch (err: any) {
+			const msg = err?.message || 'Unknown error';
+			Alert.alert('Refresh Failed', `Could not refresh roster data. ${msg}`);
+		} finally {
+			setUpdatingRoster(false);
+		}
+	};
+
+	// Populate roster from Excel file into database
+	const populateRoster = async () => {
+		if (populatingRoster) return;
+		setPopulatingRoster(true);
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), 15000);
 		try {
-			const res = await fetch(`${API_URL}/update-roster`, {
+			const res = await fetch(`${API_URL}/populate-roster`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ initiatedAt: new Date().toISOString() }),
@@ -430,14 +503,14 @@ export default function PathwayBoard() {
 			// Set teacher name and grade from backend response
 			setTeacherName(result.teacher_name || 'Teacher Name');
 			setClassGrade(result.grade || 'Grade');
-			// After successful update, re-fetch students
+			// After successful populate, re-fetch students
 			await fetchStudents();
-			Alert.alert('Roster Updated', 'The class roster was refreshed successfully.');
+			Alert.alert('Roster Populated', 'The class roster has been loaded from the Excel file and database updated.');
 		} catch (err: any) {
 			const msg = err?.name === 'AbortError' ? 'Request timed out.' : (err?.message || 'Unknown error');
-			Alert.alert('Update Failed', `Could not update roster. ${msg}`);
+			Alert.alert('Populate Failed', `Could not populate roster from Excel. ${msg}`);
 		} finally {
-			setUpdatingRoster(false);
+			setPopulatingRoster(false);
 		}
 	};
 
@@ -548,7 +621,24 @@ export default function PathwayBoard() {
 								</Pressable>
 							</View>
 							<View style={styles.settingsContent}>
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10 }]}>Settings options will go here</Text>
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Class Selection</Text>
+								<Pressable
+									onPress={() => {
+										fetchAvailableTables();
+										setShowClassDialog(true);
+									}}
+									style={({ pressed }) => [
+										styles.settingsActionButton,
+										{ backgroundColor: '#2d5aa8' },
+										pressed && styles.pressed,
+									]}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
+										Select Class Table ({selectedTable})
+									</Text>
+								</Pressable>
+
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Roster Management</Text>
 								<Pressable
 									onPress={updateRoster}
 									disabled={updatingRoster}
@@ -559,7 +649,22 @@ export default function PathwayBoard() {
 									]}
 								>
 									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
-										{updatingRoster ? 'Updating Roster…' : 'Update Roster'}
+										{updatingRoster ? 'Refreshing Data…' : 'Update Roster'}
+									</Text>
+								</Pressable>
+
+								<Pressable
+									onPress={populateRoster}
+									disabled={populatingRoster}
+									style={({ pressed }) => [
+										styles.settingsActionButton,
+										{ backgroundColor: '#c93a3a', marginTop: 10 },
+										populatingRoster && styles.settingsActionButtonDisabled,
+										pressed && !populatingRoster && styles.pressed,
+									]}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+										{populatingRoster ? 'Resetting from Excel…' : 'Reset Roster'}
 									</Text>
 								</Pressable>
 
@@ -576,10 +681,6 @@ export default function PathwayBoard() {
 										Generate Student Report
 									</Text>
 								</Pressable>
-
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.7, marginTop: 6 }]}> 
-									Backend: {API_URL}
-								</Text>
 							</View>
 						</View>
 					</View>
@@ -642,6 +743,54 @@ export default function PathwayBoard() {
 											{generatingReport ? 'Generating Report…' : 'Generate Report'}
 										</Text>
 									</Pressable>
+							</View>
+						</View>
+					</View>
+				)}
+
+				{/* Class Table Selection Dialog */}
+				{showClassDialog && (
+					<View style={styles.settingsOverlay}>
+						<View style={styles.settingsPopup}>
+							<View style={styles.settingsHeader}>
+								<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Select Class Table</Text>
+								<Pressable onPress={() => { setShowClassDialog(false); }} style={styles.closeButton}>
+									<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
+								</Pressable>
+							</View>
+							<View style={styles.settingsContent}>
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}>
+									Select which class table to display:
+								</Text>
+
+								<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+									{availableTables.map((table) => (
+										<Pressable
+											key={table}
+											onPress={() => {
+												setSelectedTable(table);
+												fetchStudents(table);
+												setShowClassDialog(false);
+											}}
+											style={({ pressed }) => [
+												styles.studentListItem,
+												selectedTable === table && styles.studentListItemSelected,
+												pressed && styles.pressed,
+											]}
+										>
+											<Text style={[
+												styles.studentListItemText,
+												{ fontSize: headerFontSize * 0.8 },
+												selectedTable === table && styles.studentListItemTextSelected
+											]}>
+												{table}
+											</Text>
+											{selectedTable === table && (
+												<Text style={[styles.studentListItemCheck, { fontSize: headerFontSize * 1.2 }]}>✓</Text>
+											)}
+										</Pressable>
+									))}
+								</ScrollView>
 							</View>
 						</View>
 					</View>

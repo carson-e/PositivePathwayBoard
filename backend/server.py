@@ -67,7 +67,22 @@ async def update_roster():
     data, teacherData, teacher_info = load_df(EXCEL_PATH)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Excel file not found or unreadable: {EXCEL_PATH}")
-    populate_db(DB_NAME, data)
+    populate_db(DB_NAME, data, teacher_info=teacher_info)
+    return UpdateResponse(
+        status="ok",
+        sheets=list(data.keys()),
+        teacher_name=teacher_info.get("Teacher Name"),
+        grade=teacher_info.get("Grade")
+    )
+
+@app.post("/populate-roster", response_model=UpdateResponse)
+async def populate_roster():
+    """Reload Excel roster from scratch, clearing all old tables (including taps) and repopulating from Excel file."""
+    data, teacherData, teacher_info = load_df(EXCEL_PATH)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Excel file not found or unreadable: {EXCEL_PATH}")
+    # Use clear_first=True and clear_taps=True to start completely fresh from Excel
+    populate_db(DB_NAME, data, teacher_info=teacher_info, clear_first=True, clear_taps=True)
     return UpdateResponse(
         status="ok",
         sheets=list(data.keys()),
@@ -80,13 +95,23 @@ async def update_roster_options():
     """Handle OPTIONS preflight for update-roster."""
     return {"status": "ok"}
 
+@app.options("/populate-roster")
+async def populate_roster_options():
+    """Handle OPTIONS preflight for populate-roster."""
+    return {"status": "ok"}
+
 @app.get("/students", response_model=List[Student])
 async def get_students(limit: int = 500):
-    """Return flattened student rows across all sheet tables."""
+    """Return flattened student rows across all sheet tables (excluding system tables)."""
     conn, cur = connect_db(DB_NAME)
     try:
         cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = [r[0] for r in cur.fetchall()]
+        all_tables = [r[0] for r in cur.fetchall()]
+        
+        # Filter out non-roster tables (system tables we want to exclude)
+        exclude_tables = {'taps', 'metadata', 'sqlite_sequence'}
+        tables = [t for t in all_tables if t not in exclude_tables]
+        
         results: List[Student] = []
         for t in tables:
             # fetch first 'limit' from each table
@@ -96,6 +121,35 @@ async def get_students(limit: int = 500):
                 row_dict = {col: row[i] for i, col in enumerate(columns)}
                 results.append(Student(sheet=t, row=row_dict))
         return results
+    finally:
+        conn.close()
+
+@app.get("/teacher-info")
+async def get_teacher_info():
+    """Return teacher name and grade from the database metadata table."""
+    conn, cur = connect_db(DB_NAME)
+    try:
+        # Check if metadata table exists
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata';")
+        if cur.fetchone():
+            # Fetch teacher name and grade from metadata table
+            cur.execute("SELECT value FROM metadata WHERE key='teacher_name'")
+            teacher_name_row = cur.fetchone()
+            teacher_name = teacher_name_row[0] if teacher_name_row else None
+            
+            cur.execute("SELECT value FROM metadata WHERE key='grade'")
+            grade_row = cur.fetchone()
+            grade = grade_row[0] if grade_row else None
+            
+            print(f"Retrieved teacher info - Name: {teacher_name}, Grade: {grade}")
+            
+            return {
+                "teacher_name": teacher_name,
+                "grade": grade
+            }
+        
+        print("Warning: metadata table does not exist")
+        return {"teacher_name": None, "grade": None}
     finally:
         conn.close()
 
