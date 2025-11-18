@@ -1,5 +1,7 @@
 import sqlite3 as sq
 import pandas as pd
+import json
+import os
 
 def connect_db(db_name):
 
@@ -7,20 +9,6 @@ def connect_db(db_name):
     cur = conn.cursor()
 
     return conn, cur
-
-
-# def build_table(conn = None, cur = None):
-#     close_conn = False
-#     if conn is None and cur is None:
-#         conn, cur = connect_db('roster.db')
-#         close_conn = True
-#     cur.execute("CREATE TABLE IF NOT EXISTS roster(id INTEGER PRIMARY KEY AUTOINCREMENT, fname TEXT NOT NULL, lname TEXT NOT NULL, p1_email TEXT, p2_email text, class_num INTEGER NOT NULL)")
-#     conn.commit()
-#     #res = cur.execute("SELECT * FROM sqlite_master")
-#     #res.fetchall()
-#     if close_conn:
-#         conn.close()
-#     #print(res)
 
 def load_df(filepath):
     """Loads all sheets from an Excel file and processes them."""
@@ -33,8 +21,8 @@ def load_df(filepath):
 
         # First, try to load with original column spec (A:I)
         try:
-            roster_full = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
-            teacherData = pd.read_excel(filepath, usecols='G:J', header=0, sheet_name=0)
+            roster_full = pd.read_excel(filepath, usecols='A:H', header=0, sheet_name=None)
+            teacherData = pd.read_excel(filepath, usecols='I:L', header=0, sheet_name=0)
         except ValueError as e:
             # If that fails, load all columns with header=None (no header row)
             print(f"Warning: Could not load columns A:I, loading all columns with no header: {e}")
@@ -93,6 +81,7 @@ def load_df(filepath):
         print(f"An error occurred: {e}")
         return None, None, None
 
+#populate_db SHOULD work as a flush for initialization, can call first and then again for new info
 def populate_db(db_name, data, conn=None, cur=None):
     """Populates the database with data from a dictionary of DataFrames."""
     close_end = False
@@ -120,12 +109,53 @@ def populate_db(db_name, data, conn=None, cur=None):
     if close_end:
         conn.close()
 
+#converts to JSON, used to push data to front end
+def push_db(db_name, table_name, conn = None, cur = None):
+    """Export a single table from the SQLite database to a JSON file.
+
+    Args:
+        db_name (str): Path to the SQLite database file.
+        table_name (str): Name of the table to export.
+        conn, cur: Optional existing connection/cursor. If omitted, a new connection is opened.
+
+    Returns:
+        str: Path to the written JSON file.
+    """
+    close_end = False
+    if conn is None and cur is None:
+        conn, cur = connect_db(db_name)
+        close_end = True
+
+    try:
+        # verify table exists
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+        if not cur.fetchone():
+            raise ValueError(f"Table '{table_name}' does not exist in database '{db_name}'")
+
+        # Quote the table name to allow spaces/special chars
+        safe_table = '"' + table_name.replace('"', '""') + '"'
+        cur.execute(f"SELECT * FROM {safe_table}")
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+
+        out_filename = f"{table_name}.json"
+        out_path = os.path.abspath(out_filename)
+        with open(out_path, 'w', encoding='utf-8') as f:
+            data = [dict(zip(cols, row)) for row in rows]
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        print(f"Exported {len(rows)} rows from '{table_name}' to {out_path}")
+        return out_path
+    finally:
+        if close_end:
+            conn.close()
+#writes taps, record keeping per student, not quite persistent
 
 
 if __name__ == "__main__":
     
     # build_table()
-    data, teacherData = load_df('StdInfo.xlsx')
+    data, teacherData, teacher_info = load_df('StdInfo.xlsx')
 
     conn, cur = connect_db('roster.db')
     cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
