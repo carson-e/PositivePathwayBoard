@@ -22,7 +22,6 @@ Key files:
 - Node.js 20+ and npm 10+
 - Python 3.10+ with `pip`
 - Excel file (.xlsx) to serve as the roster, or use the included `sample_data.xlsx`
-- Default shell: tcsh (commands below use tcsh syntax)
 
 ## Backend (FastAPI) — setup and run
 
