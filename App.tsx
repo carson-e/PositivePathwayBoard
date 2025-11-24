@@ -5,6 +5,7 @@ import {
 	View,
 	Text,
 	Pressable,
+	PressableStateCallbackType,
 	useWindowDimensions,
 	TextInput,
 	Image,
@@ -49,6 +50,23 @@ export default function PathwayBoard() {
 		(Constants as any)?.expoConfig?.extra?.API_URL ||
 		(process.env as any)?.EXPO_PUBLIC_API_URL ||
 		'http://127.0.0.1:8000';
+
+	const isHovered = (state: PressableStateCallbackType) =>
+		Boolean((state as unknown as { hovered?: boolean }).hovered);
+
+	const lightenHexColor = (hex: string, amount: number = 0.2) => {
+		const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
+		if (normalized.length !== 6) return hex;
+		const parsed = parseInt(normalized, 16);
+		if (Number.isNaN(parsed)) return hex;
+		const r = (parsed >> 16) & 0xff;
+		const g = (parsed >> 8) & 0xff;
+		const b = parsed & 0xff;
+		const mix = (channel: number) =>
+			Math.min(255, Math.round(channel + (255 - channel) * amount));
+		const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+		return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+	};
 
 	// Calculate responsive sizes based on window width
 	const cardSize = Math.max(40, Math.min(75, width * 0.055));
@@ -445,15 +463,20 @@ export default function PathwayBoard() {
 			<View key="row-0" style={[styles.triangleRow, { gap: cardGap }]}> 
 				<Pressable
 					onPress={selectAllStudents}
-					style={({ pressed }) => [
-						styles.triangleCard,
-						{ 
-							backgroundColor: getBoxColor(0, 0),
-							width: topCardSize,
-							height: topCardSize,
-						},
-						pressed && styles.pressed,
-					]}
+					style={(state) => {
+						const { pressed } = state;
+						const hovered = isHovered(state);
+						return [
+							styles.triangleCard,
+							{ 
+								backgroundColor: getBoxColor(0, 0),
+								width: topCardSize,
+								height: topCardSize,
+							},
+							hovered && styles.hoverShadow,
+							pressed && styles.pressed,
+						];
+					}}
 				>
 					<Text style={[styles.triangleCardTitle, { fontSize }]}>Select{'\n'}All{'\n'}Students</Text>
 				</Pressable>
@@ -513,15 +536,20 @@ export default function PathwayBoard() {
 					<Pressable
 						key={student.id}
 						onPress={() => handleStudentClick(student.id)}
-						style={({ pressed }) => [
-							styles.triangleCard,
-							{ 
-								backgroundColor: student.recentChoice ? '#000' : getBoxColor(col, row + 2),
-								width: studentCardSize,
-								height: studentCardSize,
-							},
-							pressed && styles.cardPressed,
-						]}
+						style={(state) => {
+							const { pressed } = state;
+							const hovered = isHovered(state);
+							return [
+								styles.triangleCard,
+								{ 
+									backgroundColor: student.recentChoice ? '#000' : getBoxColor(col, row + 2),
+									width: studentCardSize,
+									height: studentCardSize,
+								},
+								hovered && styles.hoverShadow,
+								pressed && styles.cardPressed,
+							];
+						}}
 					>
 						{!student.recentChoice && (
 							<Text
@@ -699,13 +727,31 @@ export default function PathwayBoard() {
 						<View style={styles.headerRight}>
 							<Pressable 
 								onPress={() => setShowSettings(!showSettings)}
-								style={({ pressed }) => [
-									styles.settingsButton,
-									{ width: cardSize, height: cardSize },
-									pressed && styles.pressed
-								]}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsButton,
+										{ width: cardSize, height: cardSize },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
 							>
-								<Text style={[styles.settingsButtonText, { fontSize: cardSize * 0.4 }]}>⚙️</Text>
+									<Text
+										style={[
+											styles.settingsButtonText,
+											{
+												fontSize: cardSize * 0.6,
+												lineHeight: cardSize * 0.6,
+												textAlign: 'center',
+												includeFontPadding: false,
+												marginTop: -cardSize * 0.05,
+											},
+										]}
+									>
+										⚙️
+									</Text>
 							</Pressable>
 							<View style={[styles.imageSquare, { width: cardSize, height: cardSize }]}> 
 								<Image 
@@ -717,192 +763,6 @@ export default function PathwayBoard() {
 						</View>
 					</View>
 				</View>
-
-				{/* Settings Popup */}
-				{showSettings && (
-					<View style={styles.settingsOverlay}>
-						<View style={styles.settingsPopup}>
-							<View style={styles.settingsHeader}>
-								<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Settings</Text>
-								<Pressable onPress={() => setShowSettings(false)} style={styles.closeButton}>
-									<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
-								</Pressable>
-							</View>
-							<View style={styles.settingsContent}>
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Class Selection</Text>
-								<Pressable
-									onPress={() => {
-										fetchAvailableTables();
-										setShowClassDialog(true);
-									}}
-									style={({ pressed }) => [
-										styles.settingsActionButton,
-										{ backgroundColor: '#2d5aa8' },
-										pressed && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
-										Select Class Table ({selectedTable})
-									</Text>
-								</Pressable>
-
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Roster Management</Text>
-								<Pressable
-									onPress={updateRoster}
-									disabled={updatingRoster}
-									style={({ pressed }) => [
-										styles.settingsActionButton,
-										updatingRoster && styles.settingsActionButtonDisabled,
-										pressed && !updatingRoster && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
-										{updatingRoster ? 'Refreshing Data…' : 'Update Roster'}
-									</Text>
-								</Pressable>
-
-								<Pressable
-									onPress={populateRoster}
-									disabled={populatingRoster}
-									style={({ pressed }) => [
-										styles.settingsActionButton,
-										{ backgroundColor: '#c93a3a', marginTop: 10 },
-										populatingRoster && styles.settingsActionButtonDisabled,
-										pressed && !populatingRoster && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
-										{populatingRoster ? 'Resetting from Excel…' : 'Reset Roster'}
-									</Text>
-								</Pressable>
-
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Report Generation</Text>
-								<Pressable
-									onPress={() => setShowReportDialog(true)}
-									style={({ pressed }) => [
-									styles.settingsActionButton,
-									{ backgroundColor: '#2d5aa8' },
-									pressed && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
-										Generate Student Report
-									</Text>
-								</Pressable>
-							</View>
-						</View>
-					</View>
-				)}
-
-					{/* Report Generation Dialog */}
-					{showReportDialog && (
-						<View style={styles.settingsOverlay}>
-							<View style={styles.settingsPopup}>
-								<View style={styles.settingsHeader}>
-									<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Generate Report</Text>
-									<Pressable onPress={() => { setShowReportDialog(false); setSelectedStudentForReport(''); }} style={styles.closeButton}>
-										<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
-									</Pressable>
-								</View>
-								<View style={styles.settingsContent}>
-									<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}>
-									Select a student to generate their behavioral progress report:
-									</Text>
-				
-									<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
-										{students
-											.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
-											.map((student) => (
-												<Pressable
-													key={student.id}
-													onPress={() => setSelectedStudentForReport(student.name)}
-													style={({ pressed }) => [
-														styles.studentListItem,
-														selectedStudentForReport === student.name && styles.studentListItemSelected,
-														pressed && styles.pressed,
-													]}
-												>
-													<Text style={[
-														styles.studentListItemText,
-														{ fontSize: headerFontSize * 0.8 },
-														selectedStudentForReport === student.name && styles.studentListItemTextSelected
-													]}>
-														{student.name}
-													</Text>
-													{selectedStudentForReport === student.name && (
-														<Text style={[styles.studentListItemCheck, { fontSize: headerFontSize * 1.2 }]}>✓</Text>
-													)}
-												</Pressable>
-											))
-										}
-									</ScrollView>
-				
-									<Pressable
-										onPress={generateReport}
-										disabled={!selectedStudentForReport || generatingReport}
-										style={({ pressed }) => [
-											styles.settingsActionButton,
-											{ marginTop: 15, backgroundColor: '#2d5aa8' },
-											(!selectedStudentForReport || generatingReport) && styles.settingsActionButtonDisabled,
-											pressed && selectedStudentForReport && !generatingReport && styles.pressed,
-										]}
-									>
-										<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
-											{generatingReport ? 'Generating Report…' : 'Generate Report'}
-										</Text>
-									</Pressable>
-							</View>
-						</View>
-					</View>
-				)}
-
-				{/* Class Table Selection Dialog */}
-				{showClassDialog && (
-					<View style={styles.settingsOverlay}>
-						<View style={styles.settingsPopup}>
-							<View style={styles.settingsHeader}>
-								<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Select Class Table</Text>
-								<Pressable onPress={() => { setShowClassDialog(false); }} style={styles.closeButton}>
-									<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
-								</Pressable>
-							</View>
-							<View style={styles.settingsContent}>
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}>
-									Select which class table to display:
-								</Text>
-
-								<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
-									{availableTables.map((table) => (
-										<Pressable
-											key={table}
-											onPress={() => {
-												setSelectedTable(table);
-												fetchStudents(table);
-												setShowClassDialog(false);
-											}}
-											style={({ pressed }) => [
-												styles.studentListItem,
-												selectedTable === table && styles.studentListItemSelected,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text style={[
-												styles.studentListItemText,
-												{ fontSize: headerFontSize * 0.8 },
-												selectedTable === table && styles.studentListItemTextSelected
-											]}>
-												{table}
-											</Text>
-											{selectedTable === table && (
-												<Text style={[styles.studentListItemCheck, { fontSize: headerFontSize * 1.2 }]}>✓</Text>
-											)}
-										</Pressable>
-									))}
-								</ScrollView>
-							</View>
-						</View>
-					</View>
-				)}
 
 				{/* Main Content */}
 				<View style={styles.mainContent}>
@@ -937,15 +797,20 @@ export default function PathwayBoard() {
 										<View style={styles.choiceCell}>
 											<Pressable
 												onPress={() => handleChoiceClick(positiveChoices[index])}
-												style={({ pressed }) => [
-													styles.choiceButton,
-													{
-														backgroundColor: lightPawsColors[index],
-														height: choiceButtonHeight,
-													},
-													selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
-													pressed && styles.pressed,
-												]}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.choiceButton,
+														{
+															backgroundColor: lightPawsColors[index],
+															height: choiceButtonHeight,
+														},
+														selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
 											>
 												<Text
 													style={[
@@ -961,15 +826,20 @@ export default function PathwayBoard() {
 										<View style={styles.choiceCell}>
 											<Pressable
 												onPress={() => handleChoiceClick(negativeChoices[index])}
-												style={({ pressed }) => [
-													styles.choiceButton,
-													{
-														backgroundColor: lightPawsColors[index],
-														height: choiceButtonHeight,
-													},
-													selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
-													pressed && styles.pressed,
-												]}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.choiceButton,
+														{
+															backgroundColor: lightPawsColors[index],
+															height: choiceButtonHeight,
+														},
+														selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
 											>
 												<Text
 													style={[
@@ -1011,13 +881,19 @@ export default function PathwayBoard() {
 									<>
 										{/* Selector header */}
 										<Pressable
-										onPress={() =>
-											setIsPreviousTraitDropdownOpen((open) => !open)
-										}
-										style={({ pressed }) => [
-											styles.previousTraitsSelector,
-											pressed && styles.pressed,
-										]}
+											onPress={() =>
+												setIsPreviousTraitDropdownOpen((open) => !open)
+											}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.previousTraitsSelector,
+													hovered && styles.dropdownSelectorHover,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
 										>
 										<Text style={styles.previousTraitsSelectorText}>
 											{selectedPreviousTrait
@@ -1040,10 +916,16 @@ export default function PathwayBoard() {
 													setSelectedPreviousTraitKey(null);
 													setSelectedChoice('');
 												}}
-												style={({ pressed }) => [
-													styles.previousTraitsClearButton,
-													pressed && styles.pressed,
-												]}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.previousTraitsClearButton,
+														hovered && styles.clearButtonHover,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
 											>
 												<Text style={styles.previousTraitsClearButtonText}>
 													Clear selection
@@ -1092,41 +974,64 @@ export default function PathwayBoard() {
 															</Text>
 														</View>
 
-														{groupTraits.map((trait) => (
-															<Pressable
-																key={trait.key}
-																onPress={() => {
-																	const newChoice = `+ ${trait.label}`; // ALWAYS POSITIVE
+														{groupTraits.map((trait) => {
+															const isSelected = selectedPreviousTraitKey === trait.key;
+															return (
+																<Pressable
+																	key={trait.key}
+																	onPress={() => {
+																		const newChoice = `+ ${trait.label}`; // ALWAYS POSITIVE
 
-																	setSelectedPreviousTraitKey((prevKey) =>
-																		prevKey === trait.key ? null : trait.key
-																	);
+																		setSelectedPreviousTraitKey((prevKey) =>
+																			prevKey === trait.key ? null : trait.key
+																		);
 
-																	setSelectedChoice((prevChoice) =>
-																		prevChoice === newChoice ? '' : newChoice
-																	);
+																		setSelectedChoice((prevChoice) =>
+																			prevChoice === newChoice ? '' : newChoice
+																		);
 
-																	setIsPreviousTraitDropdownOpen(false);
-																}}
-																style={({ pressed }) => [
-																	styles.previousTraitsOption,
-																	{ backgroundColor: trait.color }, // 👈 tint by month color
-																	selectedPreviousTraitKey === trait.key &&
-																		styles.previousTraitsOptionSelected,
-																	pressed && styles.pressed,
-																]}
-															>
-																<Text
-																	style={[
-																		styles.previousTraitsOptionText,
-																		selectedPreviousTraitKey === trait.key &&
-																			styles.previousTraitsOptionTextSelected,
-																	]}
+																		setIsPreviousTraitDropdownOpen(false);
+																	}}
+																	style={(state) => {
+																		const { pressed } = state;
+																		const hovered = isHovered(state);
+																		const baseColor = trait.color;
+																		const defaultColor = lightenHexColor(baseColor, 0.18);
+																		const hoverColor = lightenHexColor(baseColor, 0.50);
+																		const selectedColor = lightenHexColor(baseColor, 0.65);
+																		const backgroundColor = isSelected
+																			? selectedColor
+																			: hovered
+																			? hoverColor
+																			: defaultColor;
+																		return [
+																			styles.previousTraitsOption,
+																			{ backgroundColor },
+																			pressed && styles.pressed,
+																		];
+																	}}
 																>
-																	{trait.label}
-																</Text>
-															</Pressable>
-														))}
+																	<Text
+																		style={[
+																			styles.previousTraitsOptionText,
+																			isSelected && styles.previousTraitsOptionTextSelected,
+																		]}
+																	>
+																		{trait.label}
+																	</Text>
+																	{isSelected && (
+																		<Text
+																			style={[
+																				styles.previousTraitsOptionCheck,
+																				{ fontSize: headerFontSize * 0.7 },
+																			]}
+																		>
+																			✓
+																		</Text>
+																	)}
+																</Pressable>
+															);
+														})}
 													</View>
 												);
 											})}
@@ -1159,15 +1064,20 @@ export default function PathwayBoard() {
 									<View style={styles.equationRowWithSign}>
 										<View style={styles.signTextSpacer} />
 										<Pressable
-										onPress={() => handleChoiceClick(characterTrait1)}
-										style={({ pressed }) => [
-											styles.characterBox,
-											styles.characterBoxWithSign,
-											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait1 &&
-											styles.choiceButtonActivePositive,
-											pressed && styles.pressed,
-										]}
+											onPress={() => handleChoiceClick(characterTrait1)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.characterBox,
+													styles.characterBoxWithSign,
+													{ backgroundColor: equationBgColor },
+													selectedChoice === characterTrait1 &&
+														styles.choiceButtonActivePositive,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
 										>
 										<Text
 											style={[
@@ -1182,7 +1092,7 @@ export default function PathwayBoard() {
 										</Pressable>
 									</View>
 
-									<View style={styles.equationRowWithSign}>
+									<View style={[styles.equationRowWithSign, styles.equationRowLast]}>
 										<Text
 										style={[
 											styles.signText,
@@ -1192,15 +1102,20 @@ export default function PathwayBoard() {
 										+
 										</Text>
 										<Pressable
-										onPress={() => handleChoiceClick(characterTrait2)}
-										style={({ pressed }) => [
-											styles.characterBox,
-											styles.characterBoxWithSign,
-											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait2 &&
-											styles.choiceButtonActivePositive,
-											pressed && styles.pressed,
-										]}
+											onPress={() => handleChoiceClick(characterTrait2)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.characterBox,
+													styles.characterBoxWithSign,
+													{ backgroundColor: equationBgColor },
+													selectedChoice === characterTrait2 &&
+														styles.choiceButtonActivePositive,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
 										>
 										<Text
 											style={[
@@ -1258,18 +1173,23 @@ export default function PathwayBoard() {
 										)}
 
 										<Pressable
-										onPress={() => {
+											onPress={() => {
 											const videoUrl =
 											monthlyEquations[new Date().getMonth()].videoUrl;
 											if (videoUrl && typeof window !== 'undefined') {
 											window.open(videoUrl, '_blank');
 											}
 										}}
-										style={({ pressed }) => [
-											styles.videoLinkButton,
-											{ backgroundColor: equationBgColor },
-											pressed && styles.pressed,
-										]}
+										style={(state) => {
+											const { pressed } = state;
+											const hovered = isHovered(state);
+											return [
+												styles.videoLinkButton,
+												{ backgroundColor: equationBgColor },
+												hovered && styles.hoverShadow,
+												pressed && styles.pressed,
+											];
+										}}
 										>
 										<Text
 											style={[
@@ -1334,6 +1254,311 @@ export default function PathwayBoard() {
 				</View>
 
 			</ScrollView>
+
+			{showSettings && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Settings</Text>
+							<Pressable
+								onPress={() => setShowSettings(false)}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Class Selection</Text>
+							<Pressable
+								onPress={() => {
+									fetchAvailableTables();
+									setShowClassDialog(true);
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsActionButton,
+										{ backgroundColor: '#2d5aa8' },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+									Select Class Table ({selectedTable})
+								</Text>
+							</Pressable>
+
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Report Generation</Text>
+							<Pressable
+								onPress={() => setShowReportDialog(true)}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsActionButton,
+										{ backgroundColor: '#2d5aa8' },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+									Generate Student Report
+								</Text>
+							</Pressable>
+
+							<View style={styles.settingsDivider}>
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Roster Management</Text>
+								<Pressable
+									onPress={updateRoster}
+									disabled={updatingRoster}
+									style={(state) => {
+										const { pressed } = state;
+										const hovered = isHovered(state);
+										return [
+											styles.settingsActionButton,
+											updatingRoster && styles.settingsActionButtonDisabled,
+											hovered && !updatingRoster && styles.hoverShadow,
+											pressed && !updatingRoster && styles.pressed,
+										];
+									}}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+										{updatingRoster ? 'Refreshing Data…' : 'Update Roster'}
+									</Text>
+								</Pressable>
+
+								<Pressable
+									onPress={populateRoster}
+									disabled={populatingRoster}
+									style={(state) => {
+										const { pressed } = state;
+										const hovered = isHovered(state);
+										return [
+											styles.settingsActionButton,
+											{ backgroundColor: '#c93a3a', marginTop: 10 },
+											populatingRoster && styles.settingsActionButtonDisabled,
+											hovered && !populatingRoster && styles.hoverShadow,
+											pressed && !populatingRoster && styles.pressed,
+										];
+									}}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+										{populatingRoster ? 'Resetting from Excel…' : 'Reset Roster'}
+									</Text>
+								</Pressable>
+							</View>
+						</View>
+					</View>
+				</View>
+			)}
+
+			{showReportDialog && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Generate Report</Text>
+							<Pressable
+								onPress={() => {
+									setShowReportDialog(false);
+									setSelectedStudentForReport('');
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}> 
+								Select a student to generate their behavioral progress report:
+							</Text>
+
+							<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+								{students
+									.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
+									.map((student) => (
+										<Pressable
+											key={student.id}
+											onPress={() => setSelectedStudentForReport(student.name)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												const isSelected = selectedStudentForReport === student.name;
+												return [
+													styles.studentListItem,
+													isSelected && styles.studentListItemSelected,
+													hovered && !isSelected && styles.studentListItemHover,
+													pressed && styles.pressed,
+												];
+											}}
+										>
+											<Text style={[
+												styles.studentListItemText,
+												{ fontSize: headerFontSize * 0.8 },
+												selectedStudentForReport === student.name && styles.studentListItemTextSelected
+											]}>
+												{student.name}
+											</Text>
+											{selectedStudentForReport === student.name && (
+												<Text
+													style={[
+														styles.studentListItemCheck,
+														{
+															fontSize: headerFontSize * 0.8,
+															lineHeight: headerFontSize * 0.8,
+														},
+													]}
+												>
+													✓
+												</Text>
+											)}
+										</Pressable>
+									))
+							}
+							</ScrollView>
+
+							<Pressable
+								onPress={generateReport}
+								disabled={!selectedStudentForReport || generatingReport}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									const canInteract = Boolean(selectedStudentForReport) && !generatingReport;
+									return [
+										styles.settingsActionButton,
+										{ marginTop: 15, backgroundColor: '#2d5aa8' },
+										(!selectedStudentForReport || generatingReport) && styles.settingsActionButtonDisabled,
+										hovered && canInteract && styles.hoverShadow,
+										pressed && canInteract && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
+									{generatingReport ? 'Generating Report…' : 'Generate Report'}
+								</Text>
+							</Pressable>
+						</View>
+					</View>
+				</View>
+			)}
+
+			{showClassDialog && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Select Class Table</Text>
+							<Pressable
+								onPress={() => {
+									setShowClassDialog(false);
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}> 
+								Select which class table to display:
+							</Text>
+
+							<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+								{availableTables.map((table) => (
+									<Pressable
+										key={table}
+										onPress={() => {
+											setSelectedTable(table);
+											fetchStudents(table);
+											setShowClassDialog(false);
+										}}
+										style={(state) => {
+											const { pressed } = state;
+											const hovered = isHovered(state);
+											const isSelected = selectedTable === table;
+											return [
+												styles.studentListItem,
+												isSelected && styles.studentListItemSelected,
+												hovered && !isSelected && styles.studentListItemHover,
+												pressed && styles.pressed,
+											];
+										}}
+									>
+										<Text style={[
+											styles.studentListItemText,
+											{ fontSize: headerFontSize * 0.8 },
+											selectedTable === table && styles.studentListItemTextSelected
+										]}>
+											{table}
+										</Text>
+										{selectedTable === table && (
+											<Text
+												style={[
+													styles.studentListItemCheck,
+													{
+														fontSize: headerFontSize * 0.8,
+														lineHeight: headerFontSize * 0.8,
+													},
+												]}
+											>
+												✓
+											</Text>
+										)}
+									</Pressable>
+								))}
+							</ScrollView>
+						</View>
+					</View>
+				</View>
+			)}
 		</SafeAreaView>
 	);
 }
