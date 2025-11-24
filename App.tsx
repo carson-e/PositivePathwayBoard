@@ -28,8 +28,17 @@ type MonthlyEquation = {
 	trait2: string;
 	result: string;
 	color: string;
-	badge_image: string;
+	badge_image: number;
+	videoUrl?: string;
 };
+
+type PreviousTraitOption = {
+	key: string;
+	label: string;
+	monthIndex: number;
+	color: string;
+};
+
 
 export default function PathwayBoard() {
 	const { width } = useWindowDimensions();
@@ -44,16 +53,18 @@ export default function PathwayBoard() {
 	// Calculate responsive sizes based on window width
 	const cardSize = Math.max(40, Math.min(75, width * 0.055));
 	const cardGap = Math.max(4, Math.min(6, width * 0.004));
-	const fontSize = Math.max(8, Math.min(10, cardSize * 0.13));
-	const headerFontSize = Math.max(14, Math.min(18, width * 0.02));
+	const fontSize = Math.max(10, Math.min(13, cardSize * 0.16));
+	const headerFontSize = Math.max(18, Math.min(24, width * 0.025));
 	const pawsSize = Math.max(45, Math.min(60, width * 0.04));
-	const pawsFontSize = Math.max(24, Math.min(32, pawsSize * 0.53));
+	const pawsFontSize = Math.max(30, Math.min(40, pawsSize * 0.65));
 	const choiceButtonHeight = Math.max(45, Math.min(55, width * 0.04));
+	const studentCardSize = cardSize * 1.2;
+	const topCardSize = cardSize * 1.2;
 
 	const [students, setStudents] = useState<Student[]>(
 		Array.from({ length: 33 }, (_, i) => ({
 			id: i + 1,
-			name: `Photo Name`,
+			name: `Student Name`,
 			choices: [],
 			points: 0,
 			selected: false,
@@ -160,35 +171,129 @@ export default function PathwayBoard() {
 
 	// Monthly character equation configuration
 	const monthlyEquations: Record<number, MonthlyEquation> = {
-		0: { trait1: '+ Goodness', trait2: '+ Skills', result: 'Ability', color: '#ffcdd2', badge_image: '../../assets/images/january.png' }, // January (red)
-		1: { trait1: '+ Hope', trait2: '+ Knowledge', result: 'Discernment', color: '#fff9c4', badge_image: '../../assets/images/february.png' }, // February (yellow)
-		2: { trait1: '+ Respect', trait2: '+ Gentleness', result: 'Friendships', color: '#d9e2f7', badge_image: '../../assets/images/march.png' }, // March (blue)
-		3: { trait1: '+ Self-Control', trait2: '+ Purpose', result: 'Resilience', color: '#ffcdd2', badge_image: '../../assets/images/april.png' }, // April (red)
-		4: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // May (none) 
-		5: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // June (none)
-		6: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // July (none)
-		7: { trait1: '+ Helpfulness', trait2: '+ Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: '' }, // August (yellow)
-		8: { trait1: '+ Care', trait2: '+ Safety', result: 'Stability', color: '#d9e2f7', badge_image: '' }, // September (blue)
-		9: { trait1: '+ Joy', trait2: '+ Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: '' }, // October (red)
-		10: { trait1: '+ Patience', trait2: '+ Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: '' }, // November (yellow)
-		11: { trait1: '+ Kindness', trait2: '+ Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: '' }, // December (blue)
+		0: { trait1: 'Goodness', trait2: 'Skills', result: 'Ability', color: '#ffcdd2', badge_image: 0, videoUrl: ''}, // January (red)
+		1: { trait1: 'Hope', trait2: 'Knowledge', result: 'Discernment', color: '#fff9c4', badge_image: 1, videoUrl: 'https://www.youtube.com/watch?v=XTA39otUUqE' }, // February (yellow)
+		2: { trait1: 'Respect', trait2: 'Gentleness', result: 'Friendships', color: '#d9e2f7', badge_image: 2, videoUrl: 'https://www.youtube.com/watch?v=AEG4uPGZv-4&pp=0gcJCQwKAYcqIYzv' }, // March (blue)
+		3: { trait1: 'Self-Control', trait2: 'Purpose', result: 'Resilience', color: '#ffcdd2', badge_image: 3, videoUrl: 'https://www.youtube.com/watch?v=QOYXPEbZjJ8' }, // April (red)
+		4: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // May (none) 
+		5: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // June (none)
+		6: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 7, videoUrl: '' }, // July (none)
+		7: { trait1: 'Helpfulness', trait2: 'Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: 7, videoUrl: '' }, // August (yellow)
+		8: { trait1: 'Care', trait2: 'Safety', result: 'Stability', color: '#d9e2f7', badge_image: 8, videoUrl: '' }, // September (blue)
+		9: { trait1: 'Joy', trait2: 'Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: 9, videoUrl: 'https://www.youtube.com/watch?v=fLtcRZJQCJk' }, // October (red)
+		10: { trait1: 'Patience', trait2: 'Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: 10, videoUrl: 'https://www.youtube.com/watch?v=8CoPIRFroPM' }, // November (yellow)
+		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: '' }, // December (blue)
+	};
+
+	const SCHOOL_YEAR_START_MONTH = 7; // 0 = January, so 7 = August
+	
+	type TraitCategory = 'Health' | 'Liberty' | 'Happiness' | 'Other';
+	
+	function getTraitCategory(color: string): TraitCategory {
+		const c = color.toLowerCase();
+		if (c === '#fff9c4') return 'Health';     // yellow
+		if (c === '#d9e2f7') return 'Liberty';    // blue
+		if (c === '#ffcdd2') return 'Happiness';  // red
+		return 'Other';
+	}
+
+	function buildPreviousTraits(
+		currentMonth: number,
+		monthly: Record<number, MonthlyEquation>
+	): PreviousTraitOption[] {
+		// If it's August, there are no previous traits for this school year.
+		if (currentMonth === SCHOOL_YEAR_START_MONTH) {
+			return [];
+		}
+	
+		const result: PreviousTraitOption[] = [];
+		let m = SCHOOL_YEAR_START_MONTH;
+	
+		// Walk from August up to (but not including) the current month, wrapping across years.
+		while (m !== currentMonth) {
+			const cfg = monthly[m];
+			if (cfg) {
+				// "First two traits" → trait1 and trait2, but skip blanks
+				if (cfg.trait1) {
+					result.push({
+						key: `${m}-trait1`,
+						label: cfg.trait1,  // uses month NUMBER
+						monthIndex: m,
+						color: cfg.color,
+					});
+				}
+				if (cfg.trait2) {
+					result.push({
+						key: `${m}-trait2`,
+						label: cfg.trait2,  // uses month NUMBER
+						monthIndex: m,
+						color: cfg.color,
+					});
+				}
+			}
+			m = (m + 1) % 12;
+		}
+	
+		return result;
+	}
+	
+
+	const badgeImages: Record<number, any> = {
+		0: require('./assets/images/january.png'),
+		1: require('./assets/images/february.png'),
+		2: require('./assets/images/march.png'),
+		3: require('./assets/images/april.png'),
+		7: require('./assets/images/august.png'),
+		8: require('./assets/images/september.png'),
+		9: require('./assets/images/october.png'),
+		10: require('./assets/images/november.png'),
+		11: require('./assets/images/december.png'),
 	};
 
 	const [characterTrait1, setCharacterTrait1] = useState('');
 	const [characterTrait2, setCharacterTrait2] = useState('');
 	const [equationResult, setEquationResult] = useState('');
 	const [equationBgColor, setEquationBgColor] = useState('#fef8dc');
+	const [equationBadgeImage, setEquationBadgeImage] = useState<number | null>(null);
 
-	// Set character equation based on current month
+	const [previousTraits, setPreviousTraits] = useState<PreviousTraitOption[]>([]);
+	const [isPreviousTraitDropdownOpen, setIsPreviousTraitDropdownOpen] = useState(false);
+	const [selectedPreviousTraitKey, setSelectedPreviousTraitKey] = useState<string | null>(null);
+
+	const selectedPreviousTrait = selectedPreviousTraitKey
+	? previousTraits.find((t) => t.key === selectedPreviousTraitKey) || null
+	: null;
+
+	// Box color: selected previous trait's color, otherwise fall back to the current equation's color
+	const previousTraitBoxColor = selectedPreviousTrait?.color || equationBgColor;
+
+
+	// Set character equation + previous traits based on current month
 	useEffect(() => {
 		const currentMonth = new Date().getMonth(); // 0-11
 		const monthConfig = monthlyEquations[currentMonth];
-    
-		setCharacterTrait1(monthConfig.trait1);
-		setCharacterTrait2(monthConfig.trait2);
-		setEquationResult(monthConfig.result);
-		setEquationBgColor(monthConfig.color);
+
+		if (monthConfig) {
+			setCharacterTrait1(monthConfig.trait1);
+			setCharacterTrait2(monthConfig.trait2);
+			setEquationResult(monthConfig.result);
+			setEquationBgColor(monthConfig.color);
+			setEquationBadgeImage(monthConfig.badge_image);
+		} else {
+			// Fallback safety
+			setCharacterTrait1('');
+			setCharacterTrait2('');
+			setEquationResult('');
+			setEquationBgColor('#fef8dc');
+			setEquationBadgeImage(null);
+		}
+
+		// Build list of previous character equation traits for the school year
+		const prev = buildPreviousTraits(currentMonth, monthlyEquations);
+		setPreviousTraits(prev);
+		setSelectedPreviousTraitKey(null);
 	}, []);
+
 
 	const positiveChoices: string[] = [
 		'+ Prepared for Learning',
@@ -344,8 +449,8 @@ export default function PathwayBoard() {
 						styles.triangleCard,
 						{ 
 							backgroundColor: getBoxColor(0, 0),
-							width: cardSize,
-							height: cardSize,
+							width: topCardSize,
+							height: topCardSize,
 						},
 						pressed && styles.pressed,
 					]}
@@ -361,8 +466,8 @@ export default function PathwayBoard() {
 					styles.triangleCard, 
 					{ 
 						backgroundColor: getBoxColor(0, 1),
-						width: cardSize,
-						height: cardSize,
+						width: topCardSize,
+						height: topCardSize,
 					}
 				]}>
 					<TextInput
@@ -378,8 +483,8 @@ export default function PathwayBoard() {
 					styles.triangleCard, 
 					{ 
 						backgroundColor: getBoxColor(1, 1),
-						width: cardSize,
-						height: cardSize,
+						width: topCardSize,
+						height: topCardSize,
 					}
 				]}>
 					<TextInput
@@ -412,8 +517,8 @@ export default function PathwayBoard() {
 							styles.triangleCard,
 							{ 
 								backgroundColor: student.recentChoice ? '#000' : getBoxColor(col, row + 2),
-								width: cardSize,
-								height: cardSize,
+								width: studentCardSize,
+								height: studentCardSize,
 							},
 							pressed && styles.cardPressed,
 						]}
@@ -577,7 +682,10 @@ export default function PathwayBoard() {
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
-			<ScrollView contentContainerStyle={styles.container}>
+			<ScrollView 
+				style={{ backgroundColor: '#e0f2ff' }} 
+				contentContainerStyle={styles.container}
+			>
 				{/* Header */}
 				<View style={styles.header}>
 					<View style={styles.headerContent}>
@@ -801,144 +909,430 @@ export default function PathwayBoard() {
 					{/* Left Side - Choice Taps */}
 					<View style={styles.leftSection}>
 						{/* Choice Taps */}
-						<View style={styles.choiceTapsSection}>
-							{/* Headers Row */}
-							<View style={styles.choiceHeaderRow}>
-								<View style={[styles.pawsHeaderCell, { width: pawsSize }]} />
-								<View style={styles.choiceHeaderCell}>
-									<View style={styles.choiceHeader}>
-										<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>+ Choice Taps</Text>
-									</View>
-								</View>
-								<View style={styles.choiceHeaderCell}>
-									<View style={styles.choiceHeader}>
-										<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>- Choice Taps</Text>
-									</View>
-								</View>
-							</View>
-
-							{/* PAWS rows */}
-							{pawsLetters.map((letter, index) => (
-								<View key={index} style={styles.choiceRow}>
-									<View style={[styles.pawsCell, { width: pawsSize }]}> 
-										<View style={[styles.pawsBox, { backgroundColor: pawsColors[index], height: choiceButtonHeight }]}> 
-											<Text style={[styles.pawsLetter, { fontSize: pawsFontSize }]}>{letter}</Text>
+						<View style={styles.choiceTapsRow}>
+							<View style={styles.choiceTapsSection}>
+								{/* Headers Row */}
+								<View style={styles.choiceHeaderRow}>
+									<View style={[styles.pawsHeaderCell, { width: pawsSize }]} />
+									<View style={styles.choiceHeaderCell}>
+										<View style={styles.choiceHeader}>
+											<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>+ Choice Taps</Text>
 										</View>
 									</View>
-									<View style={styles.choiceCell}>
-										<Pressable
-											onPress={() => handleChoiceClick(positiveChoices[index])}
-											style={({ pressed }) => [
-												styles.choiceButton,
-												{ 
-													backgroundColor: lightPawsColors[index],
-													height: choiceButtonHeight,
-												},
-												selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text style={[
-												styles.choiceButtonText,
-												{ fontSize: headerFontSize * 0.67 },
-												selectedChoice === positiveChoices[index] && styles.choiceButtonTextActive
-											]}>
-												{positiveChoices[index]}
-											</Text>
-										</Pressable>
-									</View>
-									<View style={styles.choiceCell}>
-										<Pressable
-											onPress={() => handleChoiceClick(negativeChoices[index])}
-											style={({ pressed }) => [
-												styles.choiceButton,
-												{ 
-													backgroundColor: lightPawsColors[index],
-													height: choiceButtonHeight,
-												},
-												selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text style={[
-												styles.choiceButtonText,
-												{ fontSize: headerFontSize * 0.67 },
-												selectedChoice === negativeChoices[index] && styles.choiceButtonTextActive
-											]}>
-												{negativeChoices[index]}
-											</Text>
-										</Pressable>
+									<View style={styles.choiceHeaderCell}>
+										<View style={styles.choiceHeader}>
+											<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>- Choice Taps</Text>
+										</View>
 									</View>
 								</View>
-							))}
+
+								{/* PAWS rows */}
+								{pawsLetters.map((letter, index) => (
+									<View key={index} style={styles.choiceRow}>
+										<View style={[styles.pawsCell, { width: pawsSize }]}>
+											<View style={[styles.pawsBox, { backgroundColor: pawsColors[index], height: choiceButtonHeight }]}>
+												<Text style={[styles.pawsLetter, { fontSize: pawsFontSize }]}>{letter}</Text>
+											</View>
+										</View>
+										<View style={styles.choiceCell}>
+											<Pressable
+												onPress={() => handleChoiceClick(positiveChoices[index])}
+												style={({ pressed }) => [
+													styles.choiceButton,
+													{
+														backgroundColor: lightPawsColors[index],
+														height: choiceButtonHeight,
+													},
+													selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
+													pressed && styles.pressed,
+												]}
+											>
+												<Text
+													style={[
+														styles.choiceButtonText,
+														{ fontSize: headerFontSize * 0.67 },
+														selectedChoice === positiveChoices[index] && styles.choiceButtonTextActive,
+													]}
+												>
+													{positiveChoices[index]}
+												</Text>
+											</Pressable>
+										</View>
+										<View style={styles.choiceCell}>
+											<Pressable
+												onPress={() => handleChoiceClick(negativeChoices[index])}
+												style={({ pressed }) => [
+													styles.choiceButton,
+													{
+														backgroundColor: lightPawsColors[index],
+														height: choiceButtonHeight,
+													},
+													selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
+													pressed && styles.pressed,
+												]}
+											>
+												<Text
+													style={[
+														styles.choiceButtonText,
+														{ fontSize: headerFontSize * 0.67 },
+														selectedChoice === negativeChoices[index] && styles.choiceButtonTextActive,
+													]}
+												>
+													{negativeChoices[index]}
+												</Text>
+											</Pressable>
+										</View>
+									</View>
+								))}
+							</View>
 						</View>
 
-						{/* Character Equation - Only show if month has an equation */}
-						{characterTrait1 && characterTrait2 && (
-							<View style={styles.characterEquation}>
-								<View style={[styles.equationHeader, { backgroundColor: equationBgColor }]}> 
-									<Text style={[styles.equationHeaderText, { fontSize: headerFontSize * 0.65 }]}>This Month's Character Equation:</Text>
+						{/* Character Equation ABOVE Directions */}
+						<View style={styles.bottomRow}>
+							{/* Character Equation - Only show if month has an equation */}
+							{characterTrait1 && characterTrait2 && (
+								<View style={styles.characterEquationRow}>
+								{/* Previous Traits dropdown box */}
+								<View
+									style={[
+									styles.previousTraitsContainer,
+									{ backgroundColor: previousTraitBoxColor },
+									]}
+								>
+									<Text style={styles.previousTraitsLabel}>
+									Previous Character Equation Traits
+									</Text>
+
+									{previousTraits.length === 0 ? (
+									<Text style={styles.previousTraitsEmptyText}>
+										No previous traits for this month.
+									</Text>
+									) : (
+									<>
+										{/* Selector header */}
+										<Pressable
+										onPress={() =>
+											setIsPreviousTraitDropdownOpen((open) => !open)
+										}
+										style={({ pressed }) => [
+											styles.previousTraitsSelector,
+											pressed && styles.pressed,
+										]}
+										>
+										<Text style={styles.previousTraitsSelectorText}>
+											{selectedPreviousTrait
+											? selectedPreviousTrait.label
+											: 'Select a previous trait'}
+										</Text>
+										<Text style={styles.previousTraitsSelectorArrow}>
+											{isPreviousTraitDropdownOpen ? '▲' : '▼'}
+										</Text>
+										</Pressable>
+
+										{selectedPreviousTrait ? (
+										<View style={styles.previousTraitsSelectedInfo}>
+											<Text style={styles.previousTraitsSelectedText}>
+												Selected: {selectedPreviousTrait.label}
+											</Text>
+											<Pressable
+												onPress={() => {
+													// Clear the previous-trait selection AND the choice tap
+													setSelectedPreviousTraitKey(null);
+													setSelectedChoice('');
+												}}
+												style={({ pressed }) => [
+													styles.previousTraitsClearButton,
+													pressed && styles.pressed,
+												]}
+											>
+												<Text style={styles.previousTraitsClearButtonText}>
+													Clear selection
+												</Text>
+											</Pressable>
+										</View>
+									) : (
+										<Text style={styles.previousTraitsSelectedText}>
+											No previous trait selected.
+										</Text>
+									)}
+
+
+										{/* Dropdown options */}
+										{isPreviousTraitDropdownOpen && (
+										<ScrollView
+											style={styles.previousTraitsDropdown}
+											nestedScrollEnabled
+										>
+											{['Health', 'Liberty', 'Happiness', 'Other'].map((category) => {
+												const groupTraits = previousTraits.filter(
+													(t) => getTraitCategory(t.color) === category
+												);
+												if (!groupTraits.length) return null;
+
+												const headerColor =
+													category === 'Health'
+														? '#fff9c4'
+														: category === 'Liberty'
+														? '#d9e2f7'
+														: category === 'Happiness'
+														? '#ffcdd2'
+														: '#fef8dc';
+
+												return (
+													<View key={category}>
+														{/* Category header: "Health", "Liberty", "Happiness" */}
+														<View
+															style={[
+																styles.previousTraitsGroupHeader,
+																{ backgroundColor: headerColor },
+															]}
+														>
+															<Text style={styles.previousTraitsGroupHeaderText}>
+																{category}
+															</Text>
+														</View>
+
+														{groupTraits.map((trait) => (
+															<Pressable
+																key={trait.key}
+																onPress={() => {
+																	const newChoice = `+ ${trait.label}`; // ALWAYS POSITIVE
+
+																	setSelectedPreviousTraitKey((prevKey) =>
+																		prevKey === trait.key ? null : trait.key
+																	);
+
+																	setSelectedChoice((prevChoice) =>
+																		prevChoice === newChoice ? '' : newChoice
+																	);
+
+																	setIsPreviousTraitDropdownOpen(false);
+																}}
+																style={({ pressed }) => [
+																	styles.previousTraitsOption,
+																	{ backgroundColor: trait.color }, // 👈 tint by month color
+																	selectedPreviousTraitKey === trait.key &&
+																		styles.previousTraitsOptionSelected,
+																	pressed && styles.pressed,
+																]}
+															>
+																<Text
+																	style={[
+																		styles.previousTraitsOptionText,
+																		selectedPreviousTraitKey === trait.key &&
+																			styles.previousTraitsOptionTextSelected,
+																	]}
+																>
+																	{trait.label}
+																</Text>
+															</Pressable>
+														))}
+													</View>
+												);
+											})}
+
+										</ScrollView>
+										)}
+									</>
+									)}
 								</View>
-                
-								<View style={styles.equationRowWithSign}>
-									<View style={styles.signTextSpacer} />
-									<Pressable
+
+								{/* Existing Character Equation block */}
+								<View style={[styles.characterEquation]}>
+									<View style={styles.equationContent}>
+									<View
+										style={[
+										styles.equationHeader,
+										{ backgroundColor: equationBgColor },
+										]}
+									>
+										<Text
+										style={[
+											styles.equationHeaderText,
+											{ fontSize: headerFontSize * 0.9 },
+										]}
+										>
+										Focus Character Equation:
+										</Text>
+									</View>
+
+									<View style={styles.equationRowWithSign}>
+										<View style={styles.signTextSpacer} />
+										<Pressable
 										onPress={() => handleChoiceClick(characterTrait1)}
 										style={({ pressed }) => [
 											styles.characterBox,
 											styles.characterBoxWithSign,
 											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait1 && styles.choiceButtonActivePositive,
+											selectedChoice === characterTrait1 &&
+											styles.choiceButtonActivePositive,
 											pressed && styles.pressed,
 										]}
-									>
-										<Text style={[
+										>
+										<Text
+											style={[
 											styles.characterText,
-											{ fontSize: headerFontSize * 0.61 },
-											selectedChoice === characterTrait1 && styles.choiceButtonTextActive
-										]}>
+											{ fontSize: headerFontSize * 0.8 },
+											selectedChoice === characterTrait1 &&
+												styles.choiceButtonTextActive,
+											]}
+										>
 											{characterTrait1}
 										</Text>
-									</Pressable>
-								</View>
+										</Pressable>
+									</View>
 
-								<View style={styles.equationRowWithSign}>
-									<Text style={[styles.signText, { fontSize: pawsFontSize * 0.75 }]}>+</Text>
-									<Pressable
+									<View style={styles.equationRowWithSign}>
+										<Text
+										style={[
+											styles.signText,
+											{ fontSize: pawsFontSize * 0.9 },
+										]}
+										>
+										+
+										</Text>
+										<Pressable
 										onPress={() => handleChoiceClick(characterTrait2)}
 										style={({ pressed }) => [
 											styles.characterBox,
 											styles.characterBoxWithSign,
 											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait2 && styles.choiceButtonActivePositive,
+											selectedChoice === characterTrait2 &&
+											styles.choiceButtonActivePositive,
 											pressed && styles.pressed,
 										]}
-									>
-										<Text style={[
+										>
+										<Text
+											style={[
 											styles.characterText,
-											{ fontSize: headerFontSize * 0.61 },
-											selectedChoice === characterTrait2 && styles.choiceButtonTextActive
-										]}>
+											{ fontSize: headerFontSize * 0.8 },
+											selectedChoice === characterTrait2 &&
+												styles.choiceButtonTextActive,
+											]}
+										>
 											{characterTrait2}
 										</Text>
-									</Pressable>
-								</View>
-
-								<View style={styles.equationRowWithSign}>
-									<Text style={[styles.signText, { fontSize: pawsFontSize * 0.75 }]}>=</Text>
-									<View style={[styles.resultBox, styles.characterBoxWithSign, { backgroundColor: equationBgColor }]}> 
-										<Text style={[styles.resultText, { fontSize: headerFontSize * 0.56 }]}>{equationResult}!</Text>
+										</Pressable>
 									</View>
+
+									<View style={styles.equationDivider} />
+									<View style={styles.equationRowWithSign}>
+										<Text
+										style={[
+											styles.signText,
+											{ fontSize: pawsFontSize * 0.9 },
+										]}
+										>
+										=
+										</Text>
+										<View
+										style={[
+											styles.resultBox,
+											styles.characterBoxWithSign,
+											{ backgroundColor: equationBgColor },
+										]}
+										>
+										<Text
+											style={[
+											styles.resultText,
+											{ fontSize: headerFontSize * 0.95 },
+											]}
+										>
+											{equationResult}
+										</Text>
+										</View>
+									</View>
+									</View>
+
+									{/* Badge and Video Link Column */}
+									{equationBadgeImage !== null && (
+									<View style={styles.badgeAndLinkColumn}>
+										{badgeImages[equationBadgeImage] && (
+										<View style={styles.badgeImageContainer}>
+											<Image
+											source={badgeImages[equationBadgeImage]}
+											style={styles.badgeImage}
+											resizeMode="contain"
+											/>
+										</View>
+										)}
+
+										<Pressable
+										onPress={() => {
+											const videoUrl =
+											monthlyEquations[new Date().getMonth()].videoUrl;
+											if (videoUrl && typeof window !== 'undefined') {
+											window.open(videoUrl, '_blank');
+											}
+										}}
+										style={({ pressed }) => [
+											styles.videoLinkButton,
+											{ backgroundColor: equationBgColor },
+											pressed && styles.pressed,
+										]}
+										>
+										<Text
+											style={[
+											styles.videoLinkText,
+											{ fontSize: headerFontSize * 0.6 },
+											]}
+										>
+											📺 Watch This Month&apos;s Video
+										</Text>
+										</Pressable>
+									</View>
+									)}
 								</View>
+								</View>  
+							)}
+
+							{/* User Directions Box (now below equation) */}
+							<View style={styles.directionsBox}>
+								<Text
+								style={[
+									styles.directionsText,
+									{ fontSize: headerFontSize * 0.7 },
+								]}
+								>
+								Directions:{'\n\n'}
+								1. Select a choice tap above.{'\n'}
+								2. Tap a student card to record.{'\n'}
+								3. Tap "Select All Students" to apply to everyone.{'\n'}
+								4. Tap without choice selected to view score.
+								</Text>
 							</View>
-						)}
+							</View>
+
 					</View>
 
-					{/* Right Side - Triangle */}
-					<View style={[styles.triangleContainer, { gap: cardGap }]}> 
-						{renderTriangle()}
+					{/* Right Side - Triangle + Venn Diagram */}
+					<View style={[styles.triangleContainer, { gap: cardGap }]}>
+					{/* Venn diagram positioned in the blank space of the triangle.
+						pointerEvents="none" so it doesn't block taps on cards. */}
+					<View
+						pointerEvents="none"
+						style={[
+						styles.vennDiagramContainer,
+						{
+							width: cardSize * 8,
+							height: cardSize * 5,
+							top: cardSize * -0.1,
+							left: cardSize * -1.2,
+						},
+						]}
+					>
+						<Image
+						source={require('./assets/images/venndiagram.png')}
+						style={styles.vennDiagramImage}
+						resizeMode="contain"
+						/>
 					</View>
+
+					{renderTriangle()}
+					</View>
+
 				</View>
+
 			</ScrollView>
 		</SafeAreaView>
 	);
