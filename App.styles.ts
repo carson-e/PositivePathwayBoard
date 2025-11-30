@@ -5,6 +5,7 @@ export const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
         backgroundColor: '#f0f7ff',
+        position: 'relative',
     },
     container: {
         padding: 12,
@@ -61,11 +62,7 @@ export const styles = StyleSheet.create({
         textAlign: 'center',
     },
     settingsOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -97,6 +94,11 @@ export const styles = StyleSheet.create({
         color: '#000',
         fontWeight: '700',
     },
+    closeButtonTextHover: {
+        textShadowColor: 'rgba(0, 0, 0, 0.25)',
+        textShadowOffset: { width: 0, height: 3 },
+        textShadowRadius: 3,
+    },
     settingsContent: {
         padding: 10,
     },
@@ -118,6 +120,9 @@ export const styles = StyleSheet.create({
     settingsActionButtonText: {
         color: '#fff',
         fontWeight: '800',
+    },
+    settingsDivider: {
+        marginTop: 28,
     },
     headerText: {
         color: '#fff',
@@ -251,10 +256,12 @@ export const styles = StyleSheet.create({
 
     equationHeader: {
         borderRadius: 20,
-        padding: 6,
-        marginBottom: 6,
-        borderWidth: 2,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 10,
+        borderWidth: 3,
         borderColor: '#000',
+        alignItems: 'center',
     },
     equationHeaderText: {
         fontWeight: '700',
@@ -270,6 +277,9 @@ export const styles = StyleSheet.create({
         justifyContent: 'center',  // center the sign + box row
         marginBottom: 10,
         gap: 8,
+    },
+    equationRowLast: {
+        marginBottom: 0,
     },
     signText: {
         fontWeight: '900',
@@ -387,6 +397,7 @@ export const styles = StyleSheet.create({
     },
     studentListItemSelected: {
         backgroundColor: '#2d5aa8',
+        borderBottomColor: '#2d5aa8',
     },
     studentListItemText: {
         color: '#000',
@@ -432,8 +443,8 @@ export const styles = StyleSheet.create({
         height: 5,              // thickness of the line
         backgroundColor: '#000',// black line
         alignSelf: 'stretch',   // span full width of the equation content
-        marginVertical: 6,      // space above/below the line
-        },
+        marginVertical: 10,      // space above/below the line
+    },
         characterEquationRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -443,7 +454,7 @@ export const styles = StyleSheet.create({
     
     previousTraitsContainer: {
         borderRadius: 16,
-        paddingVertical: 10,
+        paddingVertical: 8,
         paddingHorizontal: 12,
         borderWidth: 3,
         borderColor: '#000',
@@ -453,12 +464,13 @@ export const styles = StyleSheet.create({
     previousTraitsLabel: {
         fontWeight: '700',
         color: '#000',
-        marginBottom: 6,
+        marginBottom: 4,
     },
     
     previousTraitsEmptyText: {
         color: '#000',
         fontWeight: '500',
+        marginTop: 8,
     },
     
     previousTraitsSelector: {
@@ -466,11 +478,12 @@ export const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         borderRadius: 12,
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: '#000',
         paddingVertical: 6,
-        paddingHorizontal: 8,
-        backgroundColor: 'rgba(255,255,255,0.9)',
+        paddingHorizontal: 12,
+        backgroundColor: '#fff',
+        marginBottom: 6,
     },
     
     previousTraitsSelectorText: {
@@ -489,39 +502,46 @@ export const styles = StyleSheet.create({
         marginTop: 6,
         maxHeight: 160,
         borderRadius: 12,
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: '#000',
         backgroundColor: '#fff',
+        overflow: 'hidden',
     },
     
     previousTraitsOption: {
-        paddingVertical: 6,
-        paddingHorizontal: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ddd',
-    },
-    
-    previousTraitsOptionSelected: {
-        borderWidth: 2,
-        borderColor: '#000',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
     },
     
     previousTraitsOptionText: {
         color: '#000',
         fontWeight: '600',
+        flex: 1,
     },
     
     previousTraitsOptionTextSelected: {
-        color: '#fff',
+        color: '#111',
+        fontWeight: '800',
+    },
+    
+    previousTraitsOptionCheck: {
+        color: '#000',
+        fontWeight: '800',
+        marginLeft: 12,
     },
     previousTraitsGroupHeader: {
         paddingVertical: 4,
-        paddingHorizontal: 8,
+        paddingHorizontal: 12,
     },
     
     previousTraitsGroupHeaderText: {
         fontWeight: '700',
         color: '#000',
+        textDecorationLine: 'underline',
     },
     previousTraitsSelectedInfo: {
         marginTop: 6,
@@ -551,6 +571,24 @@ export const styles = StyleSheet.create({
         color: '#000',
         fontWeight: '700',
         fontSize: 12,
+    },
+
+    hoverShadow: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        elevation: 5,
+    },
+
+    studentListItemHover: {
+        backgroundColor: '#e6edff',
+    },
+    clearButtonHover: {
+        backgroundColor: '#fff',
+    },
+    dropdownSelectorHover: {
+        backgroundColor: '#fff',
     },
     
 });

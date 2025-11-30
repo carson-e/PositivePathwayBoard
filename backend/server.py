@@ -192,16 +192,34 @@ async def generate_report(request: GenerateReportRequest):
     
     behavior_data = tracker.get_taps_for_student(request.student_name, month, year)
     
-    # Get student info from database
+    # Get student info from database (search across all sheet tables)
     conn, cur = connect_db(DB_NAME)
     try:
-        cur.execute("SELECT * FROM Sheet1 WHERE [Student Name] = ?", (request.student_name,))
-        row = cur.fetchone()
-        if not row:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        all_tables = [r[0] for r in cur.fetchall()]
+        exclude_tables = {'taps', 'metadata', 'sqlite_sequence'}
+        target_tables = [t for t in all_tables if t not in exclude_tables]
+
+        student_data = None
+        for table_name in target_tables:
+            cur.execute(f"SELECT * FROM '{table_name}' WHERE [Student Name] = ?", (request.student_name,))
+            row = cur.fetchone()
+            if row:
+                columns = [desc[0] for desc in cur.description]
+                student_data = {columns[i]: row[i] for i in range(len(columns))}
+                student_data['__sheet'] = table_name
+                break
+
+        if not student_data:
             raise HTTPException(status_code=404, detail=f"Student not found: {request.student_name}")
-        
-        columns = [desc[0] for desc in cur.description]
-        student_data = {columns[i]: row[i] for i in range(len(columns))}
+
+        # Supplement with teacher name from metadata when available
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata';")
+        if cur.fetchone():
+            cur.execute("SELECT value FROM metadata WHERE key='teacher_name'")
+            metadata_row = cur.fetchone()
+            if metadata_row and metadata_row[0]:
+                student_data.setdefault('Teacher Name', metadata_row[0])
     finally:
         conn.close()
     
