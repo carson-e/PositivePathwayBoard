@@ -149,10 +149,10 @@ I hope this message finds you well. I am writing to share <b>{student_name}</b>'
 progress for the month of <b>{month}</b>. This progress has been tracked through our in-class 
 Positive Pathways Board, which encourages positive behavior and decision making.<br/><br/>
 
-This tracking has been performed through a system of positive and negative taps based on your 
+This tracking has been performed through a system of positive and redirective taps based on your 
 student's in-class behavior. Positive taps are given for good choices, cooperation, participation, 
 and based on the applied character equations for this month which are: <b>{', '.join(character_equations)}</b>. 
-Negative taps are given for moments that require redirection or reminders.<br/><br/>
+Redirective taps are given for moments that require redirection or reminders.<br/><br/>
 
 Below, you will find charts and graphs that track your student's behavior throughout the month. 
 These visual summaries help us see how classroom behavior has changed throughout the month."""
@@ -171,7 +171,7 @@ These visual summaries help us see how classroom behavior has changed throughout
         summary_data = [
             ['Metric', 'Count', 'Percentage'],
             ['Positive Taps', str(positive_taps), f'{positive_percentage:.1f}%'],
-            ['Negative Taps', str(negative_taps), f'{100 - positive_percentage:.1f}%'],
+            ['Redirective Taps', str(negative_taps), f'{100 - positive_percentage:.1f}%'],
             ['Total Taps', str(total_taps), '100%']
         ]
         
@@ -195,7 +195,7 @@ These visual summaries help us see how classroom behavior has changed throughout
             story.append(Paragraph("Daily Breakdown", self.styles['CustomHeading']))
             
             daily_records = behavior_data['daily_data']
-            daily_data = [['Date', 'Positive', 'Negative']]
+            daily_data = [['Date', 'Positive', 'Redirective']]
             daily_data.extend(daily_records[:20])  # Show last 20 days
             
             daily_table = Table(daily_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
