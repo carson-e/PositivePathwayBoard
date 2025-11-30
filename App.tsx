@@ -5,13 +5,14 @@ import {
 	View,
 	Text,
 	Pressable,
-	StyleSheet,
+	PressableStateCallbackType,
 	useWindowDimensions,
 	TextInput,
 	Image,
 	Alert,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { styles } from './App.styles';
 
 type Student = {
 	id: number;
@@ -28,8 +29,17 @@ type MonthlyEquation = {
 	trait2: string;
 	result: string;
 	color: string;
-	badge_image: string;
+	badge_image: number;
+	videoUrl?: string;
 };
+
+type PreviousTraitOption = {
+	key: string;
+	label: string;
+	monthIndex: number;
+	color: string;
+};
+
 
 export default function PathwayBoard() {
 	const { width } = useWindowDimensions();
@@ -41,19 +51,38 @@ export default function PathwayBoard() {
 		(process.env as any)?.EXPO_PUBLIC_API_URL ||
 		'http://127.0.0.1:8000';
 
+	const isHovered = (state: PressableStateCallbackType) =>
+		Boolean((state as unknown as { hovered?: boolean }).hovered);
+
+	const lightenHexColor = (hex: string, amount: number = 0.2) => {
+		const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
+		if (normalized.length !== 6) return hex;
+		const parsed = parseInt(normalized, 16);
+		if (Number.isNaN(parsed)) return hex;
+		const r = (parsed >> 16) & 0xff;
+		const g = (parsed >> 8) & 0xff;
+		const b = parsed & 0xff;
+		const mix = (channel: number) =>
+			Math.min(255, Math.round(channel + (255 - channel) * amount));
+		const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+		return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+	};
+
 	// Calculate responsive sizes based on window width
 	const cardSize = Math.max(40, Math.min(75, width * 0.055));
 	const cardGap = Math.max(4, Math.min(6, width * 0.004));
-	const fontSize = Math.max(8, Math.min(10, cardSize * 0.13));
-	const headerFontSize = Math.max(14, Math.min(18, width * 0.02));
+	const fontSize = Math.max(10, Math.min(13, cardSize * 0.16));
+	const headerFontSize = Math.max(18, Math.min(24, width * 0.025));
 	const pawsSize = Math.max(45, Math.min(60, width * 0.04));
-	const pawsFontSize = Math.max(24, Math.min(32, pawsSize * 0.53));
+	const pawsFontSize = Math.max(30, Math.min(40, pawsSize * 0.65));
 	const choiceButtonHeight = Math.max(45, Math.min(55, width * 0.04));
+	const studentCardSize = cardSize * 1.2;
+	const topCardSize = cardSize * 1.2;
 
 	const [students, setStudents] = useState<Student[]>(
 		Array.from({ length: 33 }, (_, i) => ({
 			id: i + 1,
-			name: `Photo Name`,
+			name: `Student Name`,
 			choices: [],
 			points: 0,
 			selected: false,
@@ -65,30 +94,78 @@ export default function PathwayBoard() {
 	const [selectedChoice, setSelectedChoice] = useState<string>('');
 	const [showSettings, setShowSettings] = useState(false);
 	const [updatingRoster, setUpdatingRoster] = useState(false);
+	const [populatingRoster, setPopulatingRoster] = useState(false);
 	const [generatingReport, setGeneratingReport] = useState(false);
 	const [selectedStudentForReport, setSelectedStudentForReport] = useState<string>('');
 	const [showReportDialog, setShowReportDialog] = useState(false);
+	const [showClassDialog, setShowClassDialog] = useState(false);
 	const [loadingStudents, setLoadingStudents] = useState(false);
+	const [availableTables, setAvailableTables] = useState<string[]>([]);
+	const [selectedTable, setSelectedTable] = useState<string>('Sheet1');
 
-	// Fetch students from backend
-	const fetchStudents = async () => {
+	// Fetch available class tables from backend
+	const fetchAvailableTables = async () => {
+		try {
+			const res = await fetch(`${API_URL}/students?limit=1`);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			
+			// Extract unique table names
+			const tables = [...new Set(data.map((item: any) => item.sheet))] as string[];
+			setAvailableTables(tables);
+			
+			// Set first table as default if not already set
+			if (tables.length > 0 && !selectedTable) {
+				setSelectedTable(tables[0]);
+			}
+		} catch (err) {
+			console.warn('Failed to load available tables:', err);
+		}
+	};
+
+	// Fetch students from backend and load their tap data
+	const fetchStudents = async (tableFilter?: string) => {
 		setLoadingStudents(true);
+		const targetTable = tableFilter || selectedTable;
 		try {
 			const res = await fetch(`${API_URL}/students?limit=33`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
+			
+			// Filter by selected table
+			const filteredData = data.filter((item: any) => item.sheet === targetTable);
+			
 			// Map backend student rows to UI Student type
-			const backendStudents = data.map((item: any, idx: number) => ({
-				id: idx + 1,
-				name: item.row?.fname
-					? item.row.fname
-					: item.row?.['Student Name']
-						? item.row['Student Name']
-						: item.row?.name || `Student ${idx + 1}`,
-				choices: [],
-				points: 0,
-				selected: false,
-			}));
+			const backendStudents = await Promise.all(
+				filteredData.map(async (item: any, idx: number) => {
+					const studentName = item.row?.fname
+						? item.row.fname
+						: item.row?.['Student Name']
+							? item.row['Student Name']
+							: item.row?.name || `Student ${idx + 1}`;
+					
+					// Fetch tap data for this student
+					let points = 0;
+					try {
+						const tapRes = await fetch(`${API_URL}/taps/student/${encodeURIComponent(studentName)}`);
+						if (tapRes.ok) {
+							const tapData = await tapRes.json();
+							points = (tapData.positive_taps || 0) - (tapData.negative_taps || 0);
+						}
+					} catch (err) {
+						console.warn(`Failed to load taps for ${studentName}:`, err);
+					}
+					
+					return {
+						id: idx + 1,
+						name: studentName,
+						choices: [],
+						points: points,
+						selected: false,
+					};
+				})
+			);
+			
 			// Pad or trim to 33 students
 			const paddedStudents = Array.from({ length: 33 }, (_, i) => 
 				backendStudents[i] || {
@@ -112,35 +189,129 @@ export default function PathwayBoard() {
 
 	// Monthly character equation configuration
 	const monthlyEquations: Record<number, MonthlyEquation> = {
-		0: { trait1: '+ Goodness', trait2: '+ Skills', result: 'Ability', color: '#ffcdd2', badge_image: '../../assets/images/january.png' }, // January (red)
-		1: { trait1: '+ Hope', trait2: '+ Knowledge', result: 'Discernment', color: '#fff9c4', badge_image: '../../assets/images/february.png' }, // February (yellow)
-		2: { trait1: '+ Respect', trait2: '+ Gentleness', result: 'Friendships', color: '#d9e2f7', badge_image: '../../assets/images/march.png' }, // March (blue)
-		3: { trait1: '+ Self-Control', trait2: '+ Purpose', result: 'Resilience', color: '#ffcdd2', badge_image: '../../assets/images/april.png' }, // April (red)
-		4: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // May (none) 
-		5: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // June (none)
-		6: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: '' }, // July (none)
-		7: { trait1: '+ Helpfulness', trait2: '+ Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: '' }, // August (yellow)
-		8: { trait1: '+ Care', trait2: '+ Safety', result: 'Stability', color: '#d9e2f7', badge_image: '' }, // September (blue)
-		9: { trait1: '+ Joy', trait2: '+ Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: '' }, // October (red)
-		10: { trait1: '+ Patience', trait2: '+ Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: '' }, // November (yellow)
-		11: { trait1: '+ Kindness', trait2: '+ Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: '' }, // December (blue)
+		0: { trait1: 'Goodness', trait2: 'Skills', result: 'Ability', color: '#ffcdd2', badge_image: 0, videoUrl: ''}, // January (red)
+		1: { trait1: 'Hope', trait2: 'Knowledge', result: 'Discernment', color: '#fff9c4', badge_image: 1, videoUrl: 'https://www.youtube.com/watch?v=XTA39otUUqE' }, // February (yellow)
+		2: { trait1: 'Respect', trait2: 'Gentleness', result: 'Friendships', color: '#d9e2f7', badge_image: 2, videoUrl: 'https://www.youtube.com/watch?v=AEG4uPGZv-4&pp=0gcJCQwKAYcqIYzv' }, // March (blue)
+		3: { trait1: 'Self-Control', trait2: 'Purpose', result: 'Resilience', color: '#ffcdd2', badge_image: 3, videoUrl: 'https://www.youtube.com/watch?v=QOYXPEbZjJ8' }, // April (red)
+		4: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // May (none) 
+		5: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // June (none)
+		6: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 7, videoUrl: '' }, // July (none)
+		7: { trait1: 'Helpfulness', trait2: 'Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: 7, videoUrl: '' }, // August (yellow)
+		8: { trait1: 'Care', trait2: 'Safety', result: 'Stability', color: '#d9e2f7', badge_image: 8, videoUrl: '' }, // September (blue)
+		9: { trait1: 'Joy', trait2: 'Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: 9, videoUrl: 'https://www.youtube.com/watch?v=fLtcRZJQCJk' }, // October (red)
+		10: { trait1: 'Patience', trait2: 'Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: 10, videoUrl: 'https://www.youtube.com/watch?v=8CoPIRFroPM' }, // November (yellow)
+		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: '' }, // December (blue)
+	};
+
+	const SCHOOL_YEAR_START_MONTH = 7; // 0 = January, so 7 = August
+	
+	type TraitCategory = 'Health' | 'Liberty' | 'Happiness' | 'Other';
+	
+	function getTraitCategory(color: string): TraitCategory {
+		const c = color.toLowerCase();
+		if (c === '#fff9c4') return 'Health';     // yellow
+		if (c === '#d9e2f7') return 'Liberty';    // blue
+		if (c === '#ffcdd2') return 'Happiness';  // red
+		return 'Other';
+	}
+
+	function buildPreviousTraits(
+		currentMonth: number,
+		monthly: Record<number, MonthlyEquation>
+	): PreviousTraitOption[] {
+		// If it's August, there are no previous traits for this school year.
+		if (currentMonth === SCHOOL_YEAR_START_MONTH) {
+			return [];
+		}
+	
+		const result: PreviousTraitOption[] = [];
+		let m = SCHOOL_YEAR_START_MONTH;
+	
+		// Walk from August up to (but not including) the current month, wrapping across years.
+		while (m !== currentMonth) {
+			const cfg = monthly[m];
+			if (cfg) {
+				// "First two traits" → trait1 and trait2, but skip blanks
+				if (cfg.trait1) {
+					result.push({
+						key: `${m}-trait1`,
+						label: cfg.trait1,  // uses month NUMBER
+						monthIndex: m,
+						color: cfg.color,
+					});
+				}
+				if (cfg.trait2) {
+					result.push({
+						key: `${m}-trait2`,
+						label: cfg.trait2,  // uses month NUMBER
+						monthIndex: m,
+						color: cfg.color,
+					});
+				}
+			}
+			m = (m + 1) % 12;
+		}
+	
+		return result;
+	}
+	
+
+	const badgeImages: Record<number, any> = {
+		0: require('./assets/images/january.png'),
+		1: require('./assets/images/february.png'),
+		2: require('./assets/images/march.png'),
+		3: require('./assets/images/april.png'),
+		7: require('./assets/images/august.png'),
+		8: require('./assets/images/september.png'),
+		9: require('./assets/images/october.png'),
+		10: require('./assets/images/november.png'),
+		11: require('./assets/images/december.png'),
 	};
 
 	const [characterTrait1, setCharacterTrait1] = useState('');
 	const [characterTrait2, setCharacterTrait2] = useState('');
 	const [equationResult, setEquationResult] = useState('');
 	const [equationBgColor, setEquationBgColor] = useState('#fef8dc');
+	const [equationBadgeImage, setEquationBadgeImage] = useState<number | null>(null);
 
-	// Set character equation based on current month
+	const [previousTraits, setPreviousTraits] = useState<PreviousTraitOption[]>([]);
+	const [isPreviousTraitDropdownOpen, setIsPreviousTraitDropdownOpen] = useState(false);
+	const [selectedPreviousTraitKey, setSelectedPreviousTraitKey] = useState<string | null>(null);
+
+	const selectedPreviousTrait = selectedPreviousTraitKey
+	? previousTraits.find((t) => t.key === selectedPreviousTraitKey) || null
+	: null;
+
+	// Box color: selected previous trait's color, otherwise fall back to the current equation's color
+	const previousTraitBoxColor = selectedPreviousTrait?.color || equationBgColor;
+
+
+	// Set character equation + previous traits based on current month
 	useEffect(() => {
 		const currentMonth = new Date().getMonth(); // 0-11
 		const monthConfig = monthlyEquations[currentMonth];
-    
-		setCharacterTrait1(monthConfig.trait1);
-		setCharacterTrait2(monthConfig.trait2);
-		setEquationResult(monthConfig.result);
-		setEquationBgColor(monthConfig.color);
+
+		if (monthConfig) {
+			setCharacterTrait1(monthConfig.trait1);
+			setCharacterTrait2(monthConfig.trait2);
+			setEquationResult(monthConfig.result);
+			setEquationBgColor(monthConfig.color);
+			setEquationBadgeImage(monthConfig.badge_image);
+		} else {
+			// Fallback safety
+			setCharacterTrait1('');
+			setCharacterTrait2('');
+			setEquationResult('');
+			setEquationBgColor('#fef8dc');
+			setEquationBadgeImage(null);
+		}
+
+		// Build list of previous character equation traits for the school year
+		const prev = buildPreviousTraits(currentMonth, monthlyEquations);
+		setPreviousTraits(prev);
+		setSelectedPreviousTraitKey(null);
 	}, []);
+
 
 	const positiveChoices: string[] = [
 		'+ Prepared for Learning',
@@ -292,15 +463,20 @@ export default function PathwayBoard() {
 			<View key="row-0" style={[styles.triangleRow, { gap: cardGap }]}> 
 				<Pressable
 					onPress={selectAllStudents}
-					style={({ pressed }) => [
-						styles.triangleCard,
-						{ 
-							backgroundColor: getBoxColor(0, 0),
-							width: cardSize,
-							height: cardSize,
-						},
-						pressed && styles.pressed,
-					]}
+					style={(state) => {
+						const { pressed } = state;
+						const hovered = isHovered(state);
+						return [
+							styles.triangleCard,
+							{ 
+								backgroundColor: getBoxColor(0, 0),
+								width: topCardSize,
+								height: topCardSize,
+							},
+							hovered && styles.hoverShadow,
+							pressed && styles.pressed,
+						];
+					}}
 				>
 					<Text style={[styles.triangleCardTitle, { fontSize }]}>Select{'\n'}All{'\n'}Students</Text>
 				</Pressable>
@@ -313,8 +489,8 @@ export default function PathwayBoard() {
 					styles.triangleCard, 
 					{ 
 						backgroundColor: getBoxColor(0, 1),
-						width: cardSize,
-						height: cardSize,
+						width: topCardSize,
+						height: topCardSize,
 					}
 				]}>
 					<TextInput
@@ -330,8 +506,8 @@ export default function PathwayBoard() {
 					styles.triangleCard, 
 					{ 
 						backgroundColor: getBoxColor(1, 1),
-						width: cardSize,
-						height: cardSize,
+						width: topCardSize,
+						height: topCardSize,
 					}
 				]}>
 					<TextInput
@@ -360,15 +536,20 @@ export default function PathwayBoard() {
 					<Pressable
 						key={student.id}
 						onPress={() => handleStudentClick(student.id)}
-						style={({ pressed }) => [
-							styles.triangleCard,
-							{ 
-								backgroundColor: student.recentChoice ? '#000' : getBoxColor(col, row + 2),
-								width: cardSize,
-								height: cardSize,
-							},
-							pressed && styles.cardPressed,
-						]}
+						style={(state) => {
+							const { pressed } = state;
+							const hovered = isHovered(state);
+							return [
+								styles.triangleCard,
+								{ 
+									backgroundColor: student.recentChoice ? '#000' : getBoxColor(col, row + 2),
+									width: studentCardSize,
+									height: studentCardSize,
+								},
+								hovered && styles.hoverShadow,
+								pressed && styles.cardPressed,
+							];
+						}}
 					>
 						{!student.recentChoice && (
 							<Text
@@ -408,14 +589,39 @@ export default function PathwayBoard() {
 		return rows;
 	};
 
-	// Trigger roster update on the backend and refresh students
+	// Refresh displayed data from existing database (student names, teacher info, and tap points)
 	const updateRoster = async () => {
 		if (updatingRoster) return;
 		setUpdatingRoster(true);
+		try {
+			// Fetch fresh student data and their tap points
+			await fetchStudents();
+			
+			// Fetch teacher info from backend metadata table
+			const teacherRes = await fetch(`${API_URL}/teacher-info`);
+			if (teacherRes.ok) {
+				const teacherData = await teacherRes.json();
+				setTeacherName(teacherData.teacher_name || teacherName);
+				setClassGrade(teacherData.grade || classGrade);
+			}
+			
+			Alert.alert('Roster Refreshed', 'Student data and tap information have been reloaded from the database.');
+		} catch (err: any) {
+			const msg = err?.message || 'Unknown error';
+			Alert.alert('Refresh Failed', `Could not refresh roster data. ${msg}`);
+		} finally {
+			setUpdatingRoster(false);
+		}
+	};
+
+	// Populate roster from Excel file into database
+	const populateRoster = async () => {
+		if (populatingRoster) return;
+		setPopulatingRoster(true);
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), 15000);
 		try {
-			const res = await fetch(`${API_URL}/update-roster`, {
+			const res = await fetch(`${API_URL}/populate-roster`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ initiatedAt: new Date().toISOString() }),
@@ -430,14 +636,14 @@ export default function PathwayBoard() {
 			// Set teacher name and grade from backend response
 			setTeacherName(result.teacher_name || 'Teacher Name');
 			setClassGrade(result.grade || 'Grade');
-			// After successful update, re-fetch students
+			// After successful populate, re-fetch students
 			await fetchStudents();
-			Alert.alert('Roster Updated', 'The class roster was refreshed successfully.');
+			Alert.alert('Roster Populated', 'The class roster has been loaded from the Excel file and database updated.');
 		} catch (err: any) {
 			const msg = err?.name === 'AbortError' ? 'Request timed out.' : (err?.message || 'Unknown error');
-			Alert.alert('Update Failed', `Could not update roster. ${msg}`);
+			Alert.alert('Populate Failed', `Could not populate roster from Excel. ${msg}`);
 		} finally {
-			setUpdatingRoster(false);
+			setPopulatingRoster(false);
 		}
 	};
 
@@ -504,7 +710,10 @@ export default function PathwayBoard() {
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
-			<ScrollView contentContainerStyle={styles.container}>
+			<ScrollView 
+				style={{ backgroundColor: '#e0f2ff' }} 
+				contentContainerStyle={styles.container}
+			>
 				{/* Header */}
 				<View style={styles.header}>
 					<View style={styles.headerContent}>
@@ -518,13 +727,31 @@ export default function PathwayBoard() {
 						<View style={styles.headerRight}>
 							<Pressable 
 								onPress={() => setShowSettings(!showSettings)}
-								style={({ pressed }) => [
-									styles.settingsButton,
-									{ width: cardSize, height: cardSize },
-									pressed && styles.pressed
-								]}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsButton,
+										{ width: cardSize, height: cardSize },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
 							>
-								<Text style={[styles.settingsButtonText, { fontSize: cardSize * 0.4 }]}>⚙️</Text>
+									<Text
+										style={[
+											styles.settingsButtonText,
+											{
+												fontSize: cardSize * 0.6,
+												lineHeight: cardSize * 0.6,
+												textAlign: 'center',
+												includeFontPadding: false,
+												marginTop: -cardSize * 0.05,
+											},
+										]}
+									>
+										⚙️
+									</Text>
 							</Pressable>
 							<View style={[styles.imageSquare, { width: cardSize, height: cardSize }]}> 
 								<Image 
@@ -537,615 +764,802 @@ export default function PathwayBoard() {
 					</View>
 				</View>
 
-				{/* Settings Popup */}
-				{showSettings && (
-					<View style={styles.settingsOverlay}>
-						<View style={styles.settingsPopup}>
-							<View style={styles.settingsHeader}>
-								<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Settings</Text>
-								<Pressable onPress={() => setShowSettings(false)} style={styles.closeButton}>
-									<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
-								</Pressable>
-							</View>
-							<View style={styles.settingsContent}>
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10 }]}>Settings options will go here</Text>
-								<Pressable
-									onPress={updateRoster}
-									disabled={updatingRoster}
-									style={({ pressed }) => [
-										styles.settingsActionButton,
-										updatingRoster && styles.settingsActionButtonDisabled,
-										pressed && !updatingRoster && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
-										{updatingRoster ? 'Updating Roster…' : 'Update Roster'}
-									</Text>
-								</Pressable>
-
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Report Generation</Text>
-								<Pressable
-									onPress={() => setShowReportDialog(true)}
-									style={({ pressed }) => [
-									styles.settingsActionButton,
-									{ backgroundColor: '#2d5aa8' },
-									pressed && styles.pressed,
-									]}
-								>
-									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
-										Generate Student Report
-									</Text>
-								</Pressable>
-
-								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.7, marginTop: 6 }]}> 
-									Backend: {API_URL}
-								</Text>
-							</View>
-						</View>
-					</View>
-				)}
-
-					{/* Report Generation Dialog */}
-					{showReportDialog && (
-						<View style={styles.settingsOverlay}>
-							<View style={styles.settingsPopup}>
-								<View style={styles.settingsHeader}>
-									<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Generate Report</Text>
-									<Pressable onPress={() => { setShowReportDialog(false); setSelectedStudentForReport(''); }} style={styles.closeButton}>
-										<Text style={[styles.closeButtonText, { fontSize: headerFontSize * 1.5 }]}>×</Text>
-									</Pressable>
-								</View>
-								<View style={styles.settingsContent}>
-									<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}>
-									Select a student to generate their behavioral progress report:
-									</Text>
-				
-									<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
-										{students
-											.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
-											.map((student) => (
-												<Pressable
-													key={student.id}
-													onPress={() => setSelectedStudentForReport(student.name)}
-													style={({ pressed }) => [
-														styles.studentListItem,
-														selectedStudentForReport === student.name && styles.studentListItemSelected,
-														pressed && styles.pressed,
-													]}
-												>
-													<Text style={[
-														styles.studentListItemText,
-														{ fontSize: headerFontSize * 0.8 },
-														selectedStudentForReport === student.name && styles.studentListItemTextSelected
-													]}>
-														{student.name}
-													</Text>
-													{selectedStudentForReport === student.name && (
-														<Text style={[styles.studentListItemCheck, { fontSize: headerFontSize * 1.2 }]}>✓</Text>
-													)}
-												</Pressable>
-											))
-										}
-									</ScrollView>
-				
-									<Pressable
-										onPress={generateReport}
-										disabled={!selectedStudentForReport || generatingReport}
-										style={({ pressed }) => [
-											styles.settingsActionButton,
-											{ marginTop: 15, backgroundColor: '#2d5aa8' },
-											(!selectedStudentForReport || generatingReport) && styles.settingsActionButtonDisabled,
-											pressed && selectedStudentForReport && !generatingReport && styles.pressed,
-										]}
-									>
-										<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
-											{generatingReport ? 'Generating Report…' : 'Generate Report'}
-										</Text>
-									</Pressable>
-							</View>
-						</View>
-					</View>
-				)}
-
 				{/* Main Content */}
 				<View style={styles.mainContent}>
 					{/* Left Side - Choice Taps */}
 					<View style={styles.leftSection}>
 						{/* Choice Taps */}
-						<View style={styles.choiceTapsSection}>
-							{/* Headers Row */}
-							<View style={styles.choiceHeaderRow}>
-								<View style={[styles.pawsHeaderCell, { width: pawsSize }]} />
-								<View style={styles.choiceHeaderCell}>
-									<View style={styles.choiceHeader}>
-										<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>+ Choice Taps</Text>
-									</View>
-								</View>
-								<View style={styles.choiceHeaderCell}>
-									<View style={styles.choiceHeader}>
-										<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>- Choice Taps</Text>
-									</View>
-								</View>
-							</View>
-
-							{/* PAWS rows */}
-							{pawsLetters.map((letter, index) => (
-								<View key={index} style={styles.choiceRow}>
-									<View style={[styles.pawsCell, { width: pawsSize }]}> 
-										<View style={[styles.pawsBox, { backgroundColor: pawsColors[index], height: choiceButtonHeight }]}> 
-											<Text style={[styles.pawsLetter, { fontSize: pawsFontSize }]}>{letter}</Text>
+						<View style={styles.choiceTapsRow}>
+							<View style={styles.choiceTapsSection}>
+								{/* Headers Row */}
+								<View style={styles.choiceHeaderRow}>
+									<View style={[styles.pawsHeaderCell, { width: pawsSize }]} />
+									<View style={styles.choiceHeaderCell}>
+										<View style={styles.choiceHeader}>
+											<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>+ Choice Taps</Text>
 										</View>
 									</View>
-									<View style={styles.choiceCell}>
-										<Pressable
-											onPress={() => handleChoiceClick(positiveChoices[index])}
-											style={({ pressed }) => [
-												styles.choiceButton,
-												{ 
-													backgroundColor: lightPawsColors[index],
-													height: choiceButtonHeight,
-												},
-												selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text style={[
-												styles.choiceButtonText,
-												{ fontSize: headerFontSize * 0.67 },
-												selectedChoice === positiveChoices[index] && styles.choiceButtonTextActive
-											]}>
-												{positiveChoices[index]}
-											</Text>
-										</Pressable>
-									</View>
-									<View style={styles.choiceCell}>
-										<Pressable
-											onPress={() => handleChoiceClick(negativeChoices[index])}
-											style={({ pressed }) => [
-												styles.choiceButton,
-												{ 
-													backgroundColor: lightPawsColors[index],
-													height: choiceButtonHeight,
-												},
-												selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text style={[
-												styles.choiceButtonText,
-												{ fontSize: headerFontSize * 0.67 },
-												selectedChoice === negativeChoices[index] && styles.choiceButtonTextActive
-											]}>
-												{negativeChoices[index]}
-											</Text>
-										</Pressable>
+									<View style={styles.choiceHeaderCell}>
+										<View style={styles.choiceHeader}>
+											<Text style={[styles.choiceHeaderText, { fontSize: headerFontSize * 0.78 }]}>- Choice Taps</Text>
+										</View>
 									</View>
 								</View>
-							))}
+
+								{/* PAWS rows */}
+								{pawsLetters.map((letter, index) => (
+									<View key={index} style={styles.choiceRow}>
+										<View style={[styles.pawsCell, { width: pawsSize }]}>
+											<View style={[styles.pawsBox, { backgroundColor: pawsColors[index], height: choiceButtonHeight }]}>
+												<Text style={[styles.pawsLetter, { fontSize: pawsFontSize }]}>{letter}</Text>
+											</View>
+										</View>
+										<View style={styles.choiceCell}>
+											<Pressable
+												onPress={() => handleChoiceClick(positiveChoices[index])}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.choiceButton,
+														{
+															backgroundColor: lightPawsColors[index],
+															height: choiceButtonHeight,
+														},
+														selectedChoice === positiveChoices[index] && styles.choiceButtonActivePositive,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
+											>
+												<Text
+													style={[
+														styles.choiceButtonText,
+														{ fontSize: headerFontSize * 0.67 },
+														selectedChoice === positiveChoices[index] && styles.choiceButtonTextActive,
+													]}
+												>
+													{positiveChoices[index]}
+												</Text>
+											</Pressable>
+										</View>
+										<View style={styles.choiceCell}>
+											<Pressable
+												onPress={() => handleChoiceClick(negativeChoices[index])}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.choiceButton,
+														{
+															backgroundColor: lightPawsColors[index],
+															height: choiceButtonHeight,
+														},
+														selectedChoice === negativeChoices[index] && styles.choiceButtonActiveNegative,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
+											>
+												<Text
+													style={[
+														styles.choiceButtonText,
+														{ fontSize: headerFontSize * 0.67 },
+														selectedChoice === negativeChoices[index] && styles.choiceButtonTextActive,
+													]}
+												>
+													{negativeChoices[index]}
+												</Text>
+											</Pressable>
+										</View>
+									</View>
+								))}
+							</View>
 						</View>
 
-						{/* Character Equation - Only show if month has an equation */}
-						{characterTrait1 && characterTrait2 && (
-							<View style={styles.characterEquation}>
-								<View style={[styles.equationHeader, { backgroundColor: equationBgColor }]}> 
-									<Text style={[styles.equationHeaderText, { fontSize: headerFontSize * 0.65 }]}>This Month's Character Equation:</Text>
+						{/* Character Equation ABOVE Directions */}
+						<View style={styles.bottomRow}>
+							{/* Character Equation - Only show if month has an equation */}
+							{characterTrait1 && characterTrait2 && (
+								<View style={styles.characterEquationRow}>
+								{/* Previous Traits dropdown box */}
+								<View
+									style={[
+									styles.previousTraitsContainer,
+									{ backgroundColor: previousTraitBoxColor },
+									]}
+								>
+									<Text style={styles.previousTraitsLabel}>
+									Previous Character Equation Traits
+									</Text>
+
+									{previousTraits.length === 0 ? (
+									<Text style={styles.previousTraitsEmptyText}>
+										No previous traits for this month.
+									</Text>
+									) : (
+									<>
+										{/* Selector header */}
+										<Pressable
+											onPress={() =>
+												setIsPreviousTraitDropdownOpen((open) => !open)
+											}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.previousTraitsSelector,
+													hovered && styles.dropdownSelectorHover,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
+										>
+										<Text style={styles.previousTraitsSelectorText}>
+											{selectedPreviousTrait
+											? selectedPreviousTrait.label
+											: 'Select a previous trait'}
+										</Text>
+										<Text style={styles.previousTraitsSelectorArrow}>
+											{isPreviousTraitDropdownOpen ? '▲' : '▼'}
+										</Text>
+										</Pressable>
+
+										{selectedPreviousTrait ? (
+										<View style={styles.previousTraitsSelectedInfo}>
+											<Text style={styles.previousTraitsSelectedText}>
+												Selected: {selectedPreviousTrait.label}
+											</Text>
+											<Pressable
+												onPress={() => {
+													// Clear the previous-trait selection AND the choice tap
+													setSelectedPreviousTraitKey(null);
+													setSelectedChoice('');
+												}}
+												style={(state) => {
+													const { pressed } = state;
+													const hovered = isHovered(state);
+													return [
+														styles.previousTraitsClearButton,
+														hovered && styles.clearButtonHover,
+														hovered && styles.hoverShadow,
+														pressed && styles.pressed,
+													];
+												}}
+											>
+												<Text style={styles.previousTraitsClearButtonText}>
+													Clear selection
+												</Text>
+											</Pressable>
+										</View>
+									) : (
+										<Text style={styles.previousTraitsSelectedText}>
+											No previous trait selected.
+										</Text>
+									)}
+
+
+										{/* Dropdown options */}
+										{isPreviousTraitDropdownOpen && (
+										<ScrollView
+											style={styles.previousTraitsDropdown}
+											nestedScrollEnabled
+										>
+											{['Health', 'Liberty', 'Happiness', 'Other'].map((category) => {
+												const groupTraits = previousTraits.filter(
+													(t) => getTraitCategory(t.color) === category
+												);
+												if (!groupTraits.length) return null;
+
+												const headerColor =
+													category === 'Health'
+														? '#fff9c4'
+														: category === 'Liberty'
+														? '#d9e2f7'
+														: category === 'Happiness'
+														? '#ffcdd2'
+														: '#fef8dc';
+
+												return (
+													<View key={category}>
+														{/* Category header: "Health", "Liberty", "Happiness" */}
+														<View
+															style={[
+																styles.previousTraitsGroupHeader,
+																{ backgroundColor: headerColor },
+															]}
+														>
+															<Text style={styles.previousTraitsGroupHeaderText}>
+																{category}
+															</Text>
+														</View>
+
+														{groupTraits.map((trait) => {
+															const isSelected = selectedPreviousTraitKey === trait.key;
+															return (
+																<Pressable
+																	key={trait.key}
+																	onPress={() => {
+																		const newChoice = `+ ${trait.label}`; // ALWAYS POSITIVE
+
+																		setSelectedPreviousTraitKey((prevKey) =>
+																			prevKey === trait.key ? null : trait.key
+																		);
+
+																		setSelectedChoice((prevChoice) =>
+																			prevChoice === newChoice ? '' : newChoice
+																		);
+
+																		setIsPreviousTraitDropdownOpen(false);
+																	}}
+																	style={(state) => {
+																		const { pressed } = state;
+																		const hovered = isHovered(state);
+																		const baseColor = trait.color;
+																		const defaultColor = lightenHexColor(baseColor, 0.18);
+																		const hoverColor = lightenHexColor(baseColor, 0.50);
+																		const selectedColor = lightenHexColor(baseColor, 0.65);
+																		const backgroundColor = isSelected
+																			? selectedColor
+																			: hovered
+																			? hoverColor
+																			: defaultColor;
+																		return [
+																			styles.previousTraitsOption,
+																			{ backgroundColor },
+																			pressed && styles.pressed,
+																		];
+																	}}
+																>
+																	<Text
+																		style={[
+																			styles.previousTraitsOptionText,
+																			isSelected && styles.previousTraitsOptionTextSelected,
+																		]}
+																	>
+																		{trait.label}
+																	</Text>
+																	{isSelected && (
+																		<Text
+																			style={[
+																				styles.previousTraitsOptionCheck,
+																				{ fontSize: headerFontSize * 0.7 },
+																			]}
+																		>
+																			✓
+																		</Text>
+																	)}
+																</Pressable>
+															);
+														})}
+													</View>
+												);
+											})}
+
+										</ScrollView>
+										)}
+									</>
+									)}
 								</View>
-                
-								<View style={styles.equationRowWithSign}>
-									<View style={styles.signTextSpacer} />
-									<Pressable
-										onPress={() => handleChoiceClick(characterTrait1)}
-										style={({ pressed }) => [
-											styles.characterBox,
-											styles.characterBoxWithSign,
-											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait1 && styles.choiceButtonActivePositive,
-											pressed && styles.pressed,
+
+								{/* Existing Character Equation block */}
+								<View style={[styles.characterEquation]}>
+									<View style={styles.equationContent}>
+									<View
+										style={[
+										styles.equationHeader,
+										{ backgroundColor: equationBgColor },
 										]}
 									>
-										<Text style={[
+										<Text
+										style={[
+											styles.equationHeaderText,
+											{ fontSize: headerFontSize * 0.9 },
+										]}
+										>
+										Focus Character Equation:
+										</Text>
+									</View>
+
+									<View style={styles.equationRowWithSign}>
+										<View style={styles.signTextSpacer} />
+										<Pressable
+											onPress={() => handleChoiceClick(characterTrait1)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.characterBox,
+													styles.characterBoxWithSign,
+													{ backgroundColor: equationBgColor },
+													selectedChoice === characterTrait1 &&
+														styles.choiceButtonActivePositive,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
+										>
+										<Text
+											style={[
 											styles.characterText,
-											{ fontSize: headerFontSize * 0.61 },
-											selectedChoice === characterTrait1 && styles.choiceButtonTextActive
-										]}>
+											{ fontSize: headerFontSize * 0.8 },
+											selectedChoice === characterTrait1 &&
+												styles.choiceButtonTextActive,
+											]}
+										>
 											{characterTrait1}
 										</Text>
-									</Pressable>
-								</View>
+										</Pressable>
+									</View>
 
-								<View style={styles.equationRowWithSign}>
-									<Text style={[styles.signText, { fontSize: pawsFontSize * 0.75 }]}>+</Text>
-									<Pressable
-										onPress={() => handleChoiceClick(characterTrait2)}
-										style={({ pressed }) => [
-											styles.characterBox,
-											styles.characterBoxWithSign,
-											{ backgroundColor: equationBgColor },
-											selectedChoice === characterTrait2 && styles.choiceButtonActivePositive,
-											pressed && styles.pressed,
+									<View style={[styles.equationRowWithSign, styles.equationRowLast]}>
+										<Text
+										style={[
+											styles.signText,
+											{ fontSize: pawsFontSize * 0.9 },
 										]}
-									>
-										<Text style={[
+										>
+										+
+										</Text>
+										<Pressable
+											onPress={() => handleChoiceClick(characterTrait2)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												return [
+													styles.characterBox,
+													styles.characterBoxWithSign,
+													{ backgroundColor: equationBgColor },
+													selectedChoice === characterTrait2 &&
+														styles.choiceButtonActivePositive,
+													hovered && styles.hoverShadow,
+													pressed && styles.pressed,
+												];
+											}}
+										>
+										<Text
+											style={[
 											styles.characterText,
-											{ fontSize: headerFontSize * 0.61 },
-											selectedChoice === characterTrait2 && styles.choiceButtonTextActive
-										]}>
+											{ fontSize: headerFontSize * 0.8 },
+											selectedChoice === characterTrait2 &&
+												styles.choiceButtonTextActive,
+											]}
+										>
 											{characterTrait2}
 										</Text>
-									</Pressable>
-								</View>
-
-								<View style={styles.equationRowWithSign}>
-									<Text style={[styles.signText, { fontSize: pawsFontSize * 0.75 }]}>=</Text>
-									<View style={[styles.resultBox, styles.characterBoxWithSign, { backgroundColor: equationBgColor }]}> 
-										<Text style={[styles.resultText, { fontSize: headerFontSize * 0.56 }]}>{equationResult}!</Text>
+										</Pressable>
 									</View>
+
+									<View style={styles.equationDivider} />
+									<View style={styles.equationRowWithSign}>
+										<Text
+										style={[
+											styles.signText,
+											{ fontSize: pawsFontSize * 0.9 },
+										]}
+										>
+										=
+										</Text>
+										<View
+										style={[
+											styles.resultBox,
+											styles.characterBoxWithSign,
+											{ backgroundColor: equationBgColor },
+										]}
+										>
+										<Text
+											style={[
+											styles.resultText,
+											{ fontSize: headerFontSize * 0.95 },
+											]}
+										>
+											{equationResult}
+										</Text>
+										</View>
+									</View>
+									</View>
+
+									{/* Badge and Video Link Column */}
+									{equationBadgeImage !== null && (
+									<View style={styles.badgeAndLinkColumn}>
+										{badgeImages[equationBadgeImage] && (
+										<View style={styles.badgeImageContainer}>
+											<Image
+											source={badgeImages[equationBadgeImage]}
+											style={styles.badgeImage}
+											resizeMode="contain"
+											/>
+										</View>
+										)}
+
+										<Pressable
+											onPress={() => {
+											const videoUrl =
+											monthlyEquations[new Date().getMonth()].videoUrl;
+											if (videoUrl && typeof window !== 'undefined') {
+											window.open(videoUrl, '_blank');
+											}
+										}}
+										style={(state) => {
+											const { pressed } = state;
+											const hovered = isHovered(state);
+											return [
+												styles.videoLinkButton,
+												{ backgroundColor: equationBgColor },
+												hovered && styles.hoverShadow,
+												pressed && styles.pressed,
+											];
+										}}
+										>
+										<Text
+											style={[
+											styles.videoLinkText,
+											{ fontSize: headerFontSize * 0.6 },
+											]}
+										>
+											📺 Watch This Month&apos;s Video
+										</Text>
+										</Pressable>
+									</View>
+									)}
 								</View>
+								</View>  
+							)}
+
+							{/* User Directions Box (now below equation) */}
+							<View style={styles.directionsBox}>
+								<Text
+								style={[
+									styles.directionsText,
+									{ fontSize: headerFontSize * 0.7 },
+								]}
+								>
+								Directions:{'\n\n'}
+								1. Select a choice tap above.{'\n'}
+								2. Tap a student card to record.{'\n'}
+								3. Tap "Select All Students" to apply to everyone.{'\n'}
+								4. Tap without choice selected to view score.
+								</Text>
 							</View>
-						)}
+							</View>
+
 					</View>
 
-					{/* Right Side - Triangle */}
-					<View style={[styles.triangleContainer, { gap: cardGap }]}> 
-						{renderTriangle()}
+					{/* Right Side - Triangle + Venn Diagram */}
+					<View style={[styles.triangleContainer, { gap: cardGap }]}>
+					{/* Venn diagram positioned in the blank space of the triangle.
+						pointerEvents="none" so it doesn't block taps on cards. */}
+					<View
+						pointerEvents="none"
+						style={[
+						styles.vennDiagramContainer,
+						{
+							width: cardSize * 8,
+							height: cardSize * 5,
+							top: cardSize * -0.1,
+							left: cardSize * -1.2,
+						},
+						]}
+					>
+						<Image
+						source={require('./assets/images/venndiagram.png')}
+						style={styles.vennDiagramImage}
+						resizeMode="contain"
+						/>
+					</View>
+
+					{renderTriangle()}
+					</View>
+
+				</View>
+
+			</ScrollView>
+
+			{showSettings && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Settings</Text>
+							<Pressable
+								onPress={() => setShowSettings(false)}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Class Selection</Text>
+							<Pressable
+								onPress={() => {
+									fetchAvailableTables();
+									setShowClassDialog(true);
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsActionButton,
+										{ backgroundColor: '#2d5aa8' },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+									Select Class Table ({selectedTable})
+								</Text>
+							</Pressable>
+
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginTop: 20, marginBottom: 10, fontWeight: '700' }]}>Report Generation</Text>
+							<Pressable
+								onPress={() => setShowReportDialog(true)}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+										styles.settingsActionButton,
+										{ backgroundColor: '#2d5aa8' },
+										hovered && styles.hoverShadow,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+									Generate Student Report
+								</Text>
+							</Pressable>
+
+							<View style={styles.settingsDivider}>
+								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Roster Management</Text>
+								<Pressable
+									onPress={updateRoster}
+									disabled={updatingRoster}
+									style={(state) => {
+										const { pressed } = state;
+										const hovered = isHovered(state);
+										return [
+											styles.settingsActionButton,
+											updatingRoster && styles.settingsActionButtonDisabled,
+											hovered && !updatingRoster && styles.hoverShadow,
+											pressed && !updatingRoster && styles.pressed,
+										];
+									}}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+										{updatingRoster ? 'Refreshing Data…' : 'Update Roster'}
+									</Text>
+								</Pressable>
+
+								<Pressable
+									onPress={populateRoster}
+									disabled={populatingRoster}
+									style={(state) => {
+										const { pressed } = state;
+										const hovered = isHovered(state);
+										return [
+											styles.settingsActionButton,
+											{ backgroundColor: '#c93a3a', marginTop: 10 },
+											populatingRoster && styles.settingsActionButtonDisabled,
+											hovered && !populatingRoster && styles.hoverShadow,
+											pressed && !populatingRoster && styles.pressed,
+										];
+									}}
+								>
+									<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}> 
+										{populatingRoster ? 'Resetting from Excel…' : 'Reset Roster'}
+									</Text>
+								</Pressable>
+							</View>
+						</View>
 					</View>
 				</View>
-			</ScrollView>
+			)}
+
+			{showReportDialog && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Generate Report</Text>
+							<Pressable
+								onPress={() => {
+									setShowReportDialog(false);
+									setSelectedStudentForReport('');
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}> 
+								Select a student to generate their behavioral progress report:
+							</Text>
+
+							<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+								{students
+									.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
+									.map((student) => (
+										<Pressable
+											key={student.id}
+											onPress={() => setSelectedStudentForReport(student.name)}
+											style={(state) => {
+												const { pressed } = state;
+												const hovered = isHovered(state);
+												const isSelected = selectedStudentForReport === student.name;
+												return [
+													styles.studentListItem,
+													isSelected && styles.studentListItemSelected,
+													hovered && !isSelected && styles.studentListItemHover,
+													pressed && styles.pressed,
+												];
+											}}
+										>
+											<Text style={[
+												styles.studentListItemText,
+												{ fontSize: headerFontSize * 0.8 },
+												selectedStudentForReport === student.name && styles.studentListItemTextSelected
+											]}>
+												{student.name}
+											</Text>
+											{selectedStudentForReport === student.name && (
+												<Text
+													style={[
+														styles.studentListItemCheck,
+														{
+															fontSize: headerFontSize * 0.8,
+															lineHeight: headerFontSize * 0.8,
+														},
+													]}
+												>
+													✓
+												</Text>
+											)}
+										</Pressable>
+									))
+							}
+							</ScrollView>
+
+							<Pressable
+								onPress={generateReport}
+								disabled={!selectedStudentForReport || generatingReport}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									const canInteract = Boolean(selectedStudentForReport) && !generatingReport;
+									return [
+										styles.settingsActionButton,
+										{ marginTop: 15, backgroundColor: '#2d5aa8' },
+										(!selectedStudentForReport || generatingReport) && styles.settingsActionButtonDisabled,
+										hovered && canInteract && styles.hoverShadow,
+										pressed && canInteract && styles.pressed,
+									];
+								}}
+							>
+								<Text style={[styles.settingsActionButtonText, { fontSize: headerFontSize * 0.9 }]}>
+									{generatingReport ? 'Generating Report…' : 'Generate Report'}
+								</Text>
+							</Pressable>
+						</View>
+					</View>
+				</View>
+			)}
+
+			{showClassDialog && (
+				<View style={styles.settingsOverlay}>
+					<View style={styles.settingsPopup}>
+						<View style={styles.settingsHeader}>
+							<Text style={[styles.settingsTitle, { fontSize: headerFontSize * 1.2 }]}>Select Class Table</Text>
+							<Pressable
+								onPress={() => {
+									setShowClassDialog(false);
+								}}
+								style={(state) => {
+									const { pressed } = state;
+									return [
+										styles.closeButton,
+										pressed && styles.pressed,
+									];
+								}}
+							>
+								{(state) => (
+									<Text
+										style={[
+											styles.closeButtonText,
+											{ fontSize: headerFontSize * 1.5 },
+											isHovered(state) && styles.closeButtonTextHover,
+										]}
+									>
+										×
+									</Text>
+								)}
+							</Pressable>
+						</View>
+						<View style={styles.settingsContent}>
+							<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.85, marginBottom: 10 }]}> 
+								Select which class table to display:
+							</Text>
+
+							<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
+								{availableTables.map((table) => (
+									<Pressable
+										key={table}
+										onPress={() => {
+											setSelectedTable(table);
+											fetchStudents(table);
+											setShowClassDialog(false);
+										}}
+										style={(state) => {
+											const { pressed } = state;
+											const hovered = isHovered(state);
+											const isSelected = selectedTable === table;
+											return [
+												styles.studentListItem,
+												isSelected && styles.studentListItemSelected,
+												hovered && !isSelected && styles.studentListItemHover,
+												pressed && styles.pressed,
+											];
+										}}
+									>
+										<Text style={[
+											styles.studentListItemText,
+											{ fontSize: headerFontSize * 0.8 },
+											selectedTable === table && styles.studentListItemTextSelected
+										]}>
+											{table}
+										</Text>
+										{selectedTable === table && (
+											<Text
+												style={[
+													styles.studentListItemCheck,
+													{
+														fontSize: headerFontSize * 0.8,
+														lineHeight: headerFontSize * 0.8,
+													},
+												]}
+											>
+												✓
+											</Text>
+										)}
+									</Pressable>
+								))}
+							</ScrollView>
+						</View>
+					</View>
+				</View>
+			)}
 		</SafeAreaView>
 	);
 }
 
-const styles = StyleSheet.create({
-	safeArea: {
-		flex: 1,
-		backgroundColor: '#e8e8e8',
-	},
-	container: {
-		padding: 12,
-	},
-	header: {
-		backgroundColor: '#000',
-		padding: 12,
-		borderRadius: 10,
-		marginBottom: 12,
-	},
-	headerContent: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 12,
-	},
-	headerLeft: {
-		width: 20,
-	},
-	headerCenter: {
-		flex: 1,
-	},
-	headerRight: {
-		flexDirection: 'row',
-		gap: 8,
-		alignItems: 'center',
-	},
-	settingsButton: {
-		backgroundColor: '#fff',
-		borderRadius: 12,
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderWidth: 3,
-		borderColor: '#000',
-	},
-	settingsButtonText: {
-		color: '#000',
-	},
-	imageSquare: {
-		backgroundColor: '#fff',
-		borderRadius: 12,
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderWidth: 3,
-		borderColor: '#000',
-		overflow: 'hidden',
-	},
-	dominoImage: {
-		width: '100%',
-		height: '100%',
-	},
-	imagePlaceholder: {
-		color: '#000',
-		fontWeight: '700',
-		textAlign: 'center',
-	},
-	settingsOverlay: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		right: 0,
-		bottom: 0,
-		backgroundColor: 'rgba(0, 0, 0, 0.5)',
-		justifyContent: 'center',
-		alignItems: 'center',
-		zIndex: 1000,
-	},
-	settingsPopup: {
-		backgroundColor: '#fff',
-		borderRadius: 12,
-		padding: 20,
-		width: '80%',
-		maxWidth: 400,
-		borderWidth: 3,
-		borderColor: '#000',
-	},
-	settingsHeader: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-		marginBottom: 20,
-	},
-	settingsTitle: {
-		fontWeight: '700',
-		color: '#000',
-	},
-	closeButton: {
-		padding: 5,
-	},
-	closeButtonText: {
-		color: '#000',
-		fontWeight: '700',
-	},
-	settingsContent: {
-		padding: 10,
-	},
-	settingsText: {
-		color: '#000',
-	},
-	settingsActionButton: {
-		backgroundColor: '#000',
-		borderRadius: 10,
-		paddingVertical: 10,
-		paddingHorizontal: 12,
-		borderWidth: 3,
-		borderColor: '#000',
-		alignItems: 'center',
-	},
-	settingsActionButtonDisabled: {
-		opacity: 0.6,
-	},
-	settingsActionButtonText: {
-		color: '#fff',
-		fontWeight: '800',
-	},
-	headerText: {
-		color: '#fff',
-		textAlign: 'center',
-	},
-	headerBold: {
-		fontWeight: '700',
-	},
-	headerSubtext: {
-		color: '#fff',
-		textAlign: 'center',
-		marginTop: 2,
-	},
-	mainContent: {
-		flexDirection: 'row',
-		gap: 12,
-	},
-	leftSection: {
-		flex: 1,
-	},
-	choiceTapsSection: {
-		marginBottom: 12,
-	},
-	choiceHeaderRow: {
-		flexDirection: 'row',
-		marginBottom: 8,
-		gap: 8,
-	},
-	pawsHeaderCell: {
-	},
-	choiceHeaderCell: {
-		flex: 1,
-	},
-	choiceHeader: {
-		backgroundColor: '#000',
-		padding: 10,
-		borderRadius: 25,
-		alignItems: 'center',
-	},
-	choiceHeaderText: {
-		color: '#fff',
-		fontWeight: '700',
-	},
-	choiceRow: {
-		flexDirection: 'row',
-		marginBottom: 8,
-		gap: 8,
-	},
-	pawsCell: {
-	},
-	pawsBox: {
-		borderRadius: 12,
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderWidth: 3,
-		borderColor: '#000',
-	},
-	pawsLetter: {
-		fontWeight: '900',
-		color: '#000',
-	},
-	choiceCell: {
-		flex: 1,
-	},
-	choiceButton: {
-		borderRadius: 25,
-		justifyContent: 'center',
-		paddingHorizontal: 12,
-		borderWidth: 3,
-		borderColor: '#000',
-	},
-	choiceButtonActivePositive: {
-		backgroundColor: '#4caf50',
-	},
-	choiceButtonActiveNegative: {
-		backgroundColor: '#ef4444',
-	},
-	choiceButtonText: {
-		fontWeight: '700',
-		color: '#000',
-	},
-	choiceButtonTextActive: {
-		color: '#fff',
-	},
-	characterEquation: {
-		backgroundColor: '#fff',
-		borderRadius: 12,
-		padding: 8,
-		borderWidth: 3,
-		borderColor: '#000',
-		maxWidth: '85%',
-		alignSelf: 'center',
-	},
-	equationHeader: {
-		borderRadius: 20,
-		padding: 6,
-		marginBottom: 6,
-		borderWidth: 2,
-		borderColor: '#000',
-	},
-	equationHeaderText: {
-		fontWeight: '700',
-		color: '#000',
-		textAlign: 'center',
-	},
-	equationRow: {
-		marginBottom: 6,
-	},
-	equationRowWithSign: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		marginBottom: 6,
-		gap: 8,
-	},
-	signText: {
-		fontWeight: '900',
-		color: '#000',
-		width: 30,
-	},
-	signTextSpacer: {
-		width: 30,
-	},
-	characterBox: {
-		borderRadius: 20,
-		padding: 8,
-		borderWidth: 3,
-		borderColor: '#000',
-		alignItems: 'center',
-	},
-	characterBoxWithSign: {
-		flex: 1,
-	},
-	characterText: {
-		fontWeight: '700',
-		color: '#000',
-	},
-	resultBox: {
-		borderRadius: 20,
-		padding: 8,
-		borderWidth: 3,
-		borderColor: '#000',
-		alignItems: 'center',
-	},
-	resultText: {
-		fontWeight: '700',
-		color: '#000',
-		textAlign: 'center',
-	},
-	triangleContainer: {
-		alignItems: 'flex-end',
-	},
-	triangleRow: {
-		flexDirection: 'row',
-	},
-	triangleCard: {
-		borderRadius: 12,
-		padding: 6,
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderWidth: 3,
-		borderColor: '#000',
-	},
-	triangleCardTitle: {
-		fontWeight: '700',
-		color: '#000',
-		textAlign: 'center',
-	},
-	triangleCardTitleSelected: {
-		color: '#fff',
-	},
-	cardPressed: {
-		opacity: 0.8,
-	},
-	scoreOverlay: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		right: 0,
-		bottom: 0,
-		backgroundColor: 'rgba(255, 255, 255, 0.95)',
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderRadius: 9,
-	},
-	scoreValue: {
-		fontWeight: '900',
-		color: '#000',
-	},
-	recentChoiceOverlay: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		right: 0,
-		bottom: 0,
-		justifyContent: 'center',
-		alignItems: 'center',
-		borderRadius: 9,
-		padding: 4,
-	},
-	recentChoiceText: {
-		fontWeight: '700',
-		color: '#fff',
-		textAlign: 'center',
-	},
-	pressed: {
-		opacity: 0.7,
-	},
-	studentListScroll: {
-		maxHeight: 300,
-		borderWidth: 2,
-		borderColor: '#000',
-		borderRadius: 8,
-		backgroundColor: '#f5f5f5',
-	},
-	studentListItem: {
-		padding: 12,
-		borderBottomWidth: 1,
-		borderBottomColor: '#ddd',
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	studentListItemSelected: {
-		backgroundColor: '#2d5aa8',
-	},
-	studentListItemText: {
-		color: '#000',
-		fontWeight: '600',
-	},
-	studentListItemTextSelected: {
-		color: '#fff',
-	},
-	studentListItemCheck: {
-		color: '#fff',
-		fontWeight: '700',
-	},
-});

@@ -69,20 +69,20 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    BUSINESS LOGIC TIER                      │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────┐  │
-│  │  PPB_DB.py      │  │  tap_tracker.py │  │ generate_  │  │
-│  │  (Excel→DB)     │  │  (Behavior)     │  │ reports.py │  │
-│  └─────────────────┘  └─────────────────┘  └────────────┘  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────┐   │
+│  │  PPB_DB.py      │  │  tap_tracker.py │  │ generate_  │   │
+│  │  (Excel→DB)     │  │  (Behavior)     │  │ reports.py │   │
+│  └─────────────────┘  └─────────────────┘  └────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      DATA TIER                              │
-│  ┌──────────────────┐         ┌──────────────────┐         │
-│  │  roster.db       │         │  taps.db         │         │
-│  │  (SQLite)        │         │  (SQLite)        │         │
-│  │  - Student Info  │         │  - Behaviors     │         │
-│  │  - Teacher Data  │         │  - Timestamps    │         │
-│  └──────────────────┘         └──────────────────┘         │
+│  ┌──────────────────┐         ┌──────────────────┐          │
+│  │  roster.db       │         │  taps.db         │          │
+│  │  (SQLite)        │         │  (SQLite)        │          │
+│  │  - Student Info  │         │  - Behaviors     │          │
+│  │  - Teacher Data  │         │  - Timestamps    │          │
+│  └──────────────────┘         └──────────────────┘          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1962,24 +1962,6 @@ rm -rf node_modules .expo
 npm install
 ```
 
-**Docker**:
-```bash
-# Build and run
-docker-compose up -d
-
-# View logs
-docker-compose logs -f backend
-
-# Restart service
-docker-compose restart backend
-
-# Stop all
-docker-compose down
-
-# Remove volumes (⚠️ deletes data)
-docker-compose down -v
-```
-
 ### E. Troubleshooting
 
 **Issue**: Frontend can't reach backend
@@ -2026,29 +2008,3 @@ mkdir -p backend/reports
 # Check file permissions
 chmod 755 backend/reports
 ```
-
----
-
-## Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2025-11-17 | Initial architecture documentation |
-
----
-
-## Contributors
-
-- **Carson E.** - Full-stack development
-- **Peizhong Ju** - Character equation concept
-
----
-
-## License
-
-Proprietary - All rights reserved by owner: carson-e
-
----
-
-**Document Status**: Complete  
-**Next Review**: 2026-02-17 (3 months)

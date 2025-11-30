@@ -142,7 +142,7 @@ class ReportGenerator:
         
         # Opening greeting
         student_name = student_data.get('Student Name', 'Student')
-        teacher_name = student_data.get('Teacher Name', 'Teacher')
+        teacher_name = student_data.get('Teacher Name') or student_data.get('teacher_name') or 'Teacher'
         
         greeting = f"""Dear Parent/Guardian,<br/><br/>
 I hope this message finds you well. I am writing to share <b>{student_name}</b>'s behavioral 
