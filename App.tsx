@@ -241,7 +241,7 @@ export default function PathwayBoard() {
 		8: { trait1: 'Care', trait2: 'Safety', result: 'Stability', color: '#d9e2f7', badge_image: 8, videoUrl: '' }, // September (blue)
 		9: { trait1: 'Joy', trait2: 'Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: 9, videoUrl: 'https://www.youtube.com/watch?v=fLtcRZJQCJk' }, // October (red)
 		10: { trait1: 'Patience', trait2: 'Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: 10, videoUrl: 'https://www.youtube.com/watch?v=8CoPIRFroPM' }, // November (yellow)
-		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: '' }, // December (blue)
+		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: 'https://www.youtube.com/watch?v=-_XVPoSm3i4' }, // December (blue)
 	};
 
 	const SCHOOL_YEAR_START_MONTH = 7; // 0 = January, so 7 = August
@@ -786,7 +786,7 @@ export default function PathwayBoard() {
 		}
 	};
 
-		const generateReport = async () => {
+	const generateReport = async () => {
 		if (!selectedStudentForReport) {
 			Alert.alert('No Student Selected', 'Please select a student to generate a report for.');
 			return;
@@ -794,59 +794,58 @@ export default function PathwayBoard() {
 	
 		setGeneratingReport(true);
 		try {
-			const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long' });
-			const currentYear = new Date().getFullYear();
-		
-			const monthIndex = new Date().getMonth();
+			const now = new Date();
+			const currentMonth = now.toLocaleDateString('en-US', { month: 'long' });
+			const currentYear = now.getFullYear();
+	
+			// Use the same monthlyEquations data you already have
+			const monthIndex = now.getMonth();
 			const monthConfig = monthlyEquations[monthIndex];
+	
 			const characterEquations = [
 				monthConfig.trait1.replace('+ ', ''),
 				monthConfig.trait2.replace('+ ', ''),
-				monthConfig.result
-			].filter(t => t);
-		
-			const res = await fetch(`${API_URL}/reports/generate`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					student_name: selectedStudentForReport,
-					month: currentMonth,
-					year: currentYear,
-					character_equations: characterEquations.length > 0 ? characterEquations : undefined
-				})
+				monthConfig.result,
+			].filter((t) => t);
+	
+			const params = new URLSearchParams({
+				student_name: selectedStudentForReport,
+				month: currentMonth,
+				year: String(currentYear),
 			});
-		
-			if (!res.ok) {
-				const error = await res.json();
-				throw new Error(error.detail || 'Report generation failed');
+	
+			// Pass equations as a single comma-separated query param
+			if (characterEquations.length > 0) {
+				params.set('character_equations', characterEquations.join(','));
 			}
-		
-			const result = await res.json();
-			Alert.alert(
-				'Report Generated!',
-				`Report for ${result.student_name} has been created successfully.\\n\\nFilename: ${result.filename}`,
-				[
-					{
-						text: 'Download',
-						onPress: () => {
-							const downloadUrl = `${API_URL}/reports/download/${result.filename}`;
-							if (typeof window !== 'undefined') {
-								window.open(downloadUrl, '_blank');
-							}
-						}
-					},
-					{ text: 'OK' }
-				]
-			);
+	
+			const downloadUrl = `${API_URL}/reports/student-report?${params.toString()}`;
+	
+			// Web: open in new tab to trigger browser download
+			if (typeof window !== 'undefined') {
+				window.open(downloadUrl, '_blank');
+			} else {
+				// Native fallback: at least show the URL
+				Alert.alert(
+					'Report Ready',
+					`Download this report from:\n${downloadUrl}`
+				);
+			}
+	
+			// Close dialog & reset selection
 			setShowReportDialog(false);
 			setSelectedStudentForReport('');
 		} catch (err: any) {
-			Alert.alert('Report Generation Failed', err.message || 'Unknown error occurred');
+			console.error('Failed to start report download', err);
+			Alert.alert(
+				'Report Generation Failed',
+				err?.message || 'Unknown error occurred'
+			);
 		} finally {
 			setGeneratingReport(false);
 		}
-
 	};
+
 	const downloadTownHallList = async () => {
 			try {
 			  const now = new Date();

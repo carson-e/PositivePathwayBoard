@@ -325,6 +325,99 @@ async def download_report(filename: str):
         filename=filename
     )
 
+@app.get("/reports/student-report")
+async def download_student_report(
+    student_name: str,
+    month: Optional[str] = None,
+    year: Optional[int] = None,
+    character_equations: Optional[str] = None,  # comma-separated list
+):
+    """
+    Stream a single student's report PDF directly to the browser
+    (no file written to the 'reports' folder).
+    """
+    # 1) Resolve month/year (defaults to current)
+    tracker = TapTracker(db_path=DB_NAME)
+    now = datetime.now()
+    month = month or now.strftime("%B")
+    year = year or now.year
+
+    # 2) Get tap/behavior data for the student
+    behavior_data = tracker.get_taps_for_student(student_name, month, year)
+
+    # 3) Get student info from DB (same logic as /reports/generate)
+    conn, cur = connect_db(DB_NAME)
+    try:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        all_tables = [r[0] for r in cur.fetchall()]
+        exclude_tables = {'taps', 'metadata', 'sqlite_sequence'}
+        target_tables = [t for t in all_tables if t not in exclude_tables]
+
+        student_data: Optional[Dict[str, Any]] = None
+        for table_name in target_tables:
+            cur.execute(
+                f"SELECT * FROM '{table_name}' WHERE [Student Name] = ?",
+                (student_name,),
+            )
+            row = cur.fetchone()
+            if row:
+                columns = [desc[0] for desc in cur.description]
+                student_data = {columns[i]: row[i] for i in range(len(columns))}
+                student_data["__sheet"] = table_name
+                break
+
+        if not student_data:
+            raise HTTPException(
+                status_code=404, detail=f"Student not found: {student_name}"
+            )
+
+        # Add teacher name from metadata if available
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='metadata';"
+        )
+        if cur.fetchone():
+            cur.execute("SELECT value FROM metadata WHERE key='teacher_name'")
+            metadata_row = cur.fetchone()
+            if metadata_row and metadata_row[0]:
+                student_data.setdefault("Teacher Name", metadata_row[0])
+    finally:
+        conn.close()
+
+    # 4) Prepare character equations
+    if character_equations:
+        ce_list = [s.strip() for s in character_equations.split(",") if s.strip()]
+    else:
+        ce_list = ["Integrity", "Respect", "Responsibility"]
+
+    # 5) Generate PDF into memory (NOT into the 'reports' folder)
+    generator = ReportGenerator()
+    pdf_buffer = io.BytesIO()
+
+    generator.generate_report_pdf(
+        student_data=student_data,
+        behavior_data=behavior_data,
+        output_path=pdf_buffer,  # ReportLab's SimpleDocTemplate accepts file-like objects
+        month=month,
+        character_equations=ce_list,
+    )
+
+    pdf_buffer.seek(0)
+    safe_name = (
+        student_name.replace(" ", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+    filename = f"{safe_name}_report_{month}_{year}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    # 6) Stream directly to browser
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers=headers,
+    )
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
