@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import os
+import csv
+import io
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -254,6 +256,59 @@ async def generate_report(request: GenerateReportRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+
+@app.get("/reports/town-hall-list")
+async def download_town_hall_list(
+    month: Optional[str] = None,
+    year: Optional[int] = None,
+):
+    """
+    Download a CSV of students who currently qualify
+    for the monthly town hall.
+
+    A student qualifies if:
+        positive_taps / (positive_taps + negative_taps) >= 0.9
+    for the given month/year.
+    """
+    tracker = TapTracker(db_path=DB_NAME)
+
+    # Default to current month/year if not provided
+    now = datetime.now()
+    month = month or now.strftime("%B")
+    year = year or now.year
+
+    all_data = tracker.get_all_students_taps(month, year)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["Student Name", "Positive Taps", "Negative Taps", "Total Taps", "Positive Percent"]
+    )
+
+    for student_name, stats in all_data.items():
+        pos = stats.get("positive_taps", 0)
+        neg = stats.get("negative_taps", 0)
+        total = pos + neg
+
+        if total == 0:
+            continue
+
+        pct = pos / total
+        if pct >= 0.9:
+            writer.writerow(
+                [student_name, pos, neg, total, f"{pct * 100:.1f}%"]
+            )
+
+    output.seek(0)
+    filename = f"town_hall_list_{month}_{year}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8")]),
+        media_type="text/csv",
+        headers=headers,
+    )
+
 
 @app.get("/reports/download/{filename}")
 async def download_report(filename: str):

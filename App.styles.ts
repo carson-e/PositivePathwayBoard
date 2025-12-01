@@ -179,7 +179,7 @@ export const styles = StyleSheet.create({
     directionsText: {
         color: '#fff',
         fontWeight: '600',
-        lineHeight: 20,
+        lineHeight: 17,
     },
     choiceHeaderRow: {
         flexDirection: 'row',
@@ -239,6 +239,14 @@ export const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#000',
     },
+    ebucksIcon: {
+        position: 'absolute',
+        right: 8,
+        top: '50%',
+        marginTop: -16,      
+        width: 32,
+        height: 32,
+    },    
     choiceButtonTextActive: {
         color: '#fff',
     },
@@ -291,14 +299,14 @@ export const styles = StyleSheet.create({
     },
     characterBox: {
         borderRadius: 20,
-        paddingVertical: 12,   // taller
+        paddingVertical: 12,   
         paddingHorizontal: 10,
         borderWidth: 3,
         borderColor: '#000',
         alignItems: 'center',
     },
     characterBoxWithSign: {
-        minWidth: 180,             // narrower than before; tweak this value
+        minWidth: 280,             
         alignSelf: 'center',
     },
     characterText: {
@@ -307,19 +315,35 @@ export const styles = StyleSheet.create({
     },
     resultBox: {
         borderRadius: 20,
-        paddingVertical: 14,   // result slightly taller
+        paddingVertical: 14,   
         paddingHorizontal: 14,
+        paddingRight: 64,
         borderWidth: 3,
         borderColor: '#000',
         alignItems: 'center',
+        position: 'relative',
     },
-        resultText: {
-        fontWeight: '900',       // already max-bold
+    resultText: {
+        fontWeight: '900',      
         color: '#000',
         textAlign: 'center',
-        letterSpacing: 0.7,      // optional, adds emphasis
-        },
-        
+        letterSpacing: 0.7,     
+    },
+    resultEbucksContainer: {
+        position: 'absolute',
+        right: 8,
+        top: '50%',
+        marginTop: -16,       
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    
+    resultEbucksIcon: {
+        width: 32,
+        height: 32,
+        marginLeft: 4,       
+    },
+    
     triangleContainer: {
         alignItems: 'flex-end',
         position: 'relative',
@@ -357,6 +381,12 @@ export const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 9,
     },
+    scoreSubtitle: {
+        marginTop: 4,
+        fontWeight: '600',
+        color: '#000',
+        textAlign: 'center',
+    },      
     scoreValue: {
         fontWeight: '900',
         color: '#000',
@@ -440,10 +470,10 @@ export const styles = StyleSheet.create({
         fontWeight: '700',
     },
     equationDivider: {
-        height: 5,              // thickness of the line
-        backgroundColor: '#000',// black line
-        alignSelf: 'stretch',   // span full width of the equation content
-        marginVertical: 10,      // space above/below the line
+        height: 5,              
+        backgroundColor: '#000',
+        alignSelf: 'stretch',   
+        marginVertical: 10,      
     },
         characterEquationRow: {
         flexDirection: 'row',

@@ -22,6 +22,12 @@ type Student = {
 	recentChoice?: string;
 	showingScore?: boolean;
 	selected?: boolean;
+
+	// monthly behavior stats (for town hall eligibility)
+	monthlyPositiveTaps?: number;
+	monthlyNegativeTaps?: number;
+	/** 0–1 fraction of positive taps this month */
+	monthlyPositivePercent?: number;
 };
 
 type MonthlyEquation = {
@@ -82,10 +88,13 @@ export default function PathwayBoard() {
 	const [students, setStudents] = useState<Student[]>(
 		Array.from({ length: 33 }, (_, i) => ({
 			id: i + 1,
-			name: `Student Name`,
+			name: `Student ${i + 1}`,
 			choices: [],
 			points: 0,
 			selected: false,
+			monthlyPositiveTaps: 0,
+			monthlyNegativeTaps: 0,
+			monthlyPositivePercent: 0,
 		}))
 	);
 
@@ -131,6 +140,10 @@ export default function PathwayBoard() {
 			const res = await fetch(`${API_URL}/students?limit=33`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
+
+			const now = new Date();
+			const currentMonthName = now.toLocaleDateString('en-US', { month: 'long' });
+			const currentYear = now.getFullYear();
 			
 			// Filter by selected table
 			const filteredData = data.filter((item: any) => item.sheet === targetTable);
@@ -142,18 +155,43 @@ export default function PathwayBoard() {
 						? item.row.fname
 						: item.row?.['Student Name']
 							? item.row['Student Name']
-							: item.row?.name || `Student ${idx + 1}`;
+							: item.row?.name || ``;
 					
 					// Fetch tap data for this student
 					let points = 0;
+					let monthlyPositiveTaps = 0;
+					let monthlyNegativeTaps = 0;
+					let monthlyPositivePercent = 0;
+
 					try {
 						const tapRes = await fetch(`${API_URL}/taps/student/${encodeURIComponent(studentName)}`);
 						if (tapRes.ok) {
 							const tapData = await tapRes.json();
-							points = (tapData.positive_taps || 0) - (tapData.negative_taps || 0);
+							const pos = tapData.positive_taps || 0;
+							const neg = tapData.negative_taps || 0;
+							points = pos - neg;
 						}
 					} catch (err) {
 						console.warn(`Failed to load taps for ${studentName}:`, err);
+					}
+
+					// 2) Monthly taps → town hall percent
+					try {
+						const monthlyRes = await fetch(
+						`${API_URL}/taps/student/${encodeURIComponent(
+							studentName
+						)}?month=${encodeURIComponent(currentMonthName)}&year=${currentYear}`
+						);
+						if (monthlyRes.ok) {
+						const monthlyData = await monthlyRes.json();
+						monthlyPositiveTaps = monthlyData.positive_taps || 0;
+						monthlyNegativeTaps = monthlyData.negative_taps || 0;
+						const monthlyTotal = monthlyPositiveTaps + monthlyNegativeTaps;
+						monthlyPositivePercent =
+							monthlyTotal > 0 ? monthlyPositiveTaps / monthlyTotal : 0;
+						}
+					} catch (err) {
+						console.warn(`Failed to load monthly taps for ${studentName}:`, err);
 					}
 					
 					return {
@@ -162,6 +200,9 @@ export default function PathwayBoard() {
 						choices: [],
 						points: points,
 						selected: false,
+						monthlyPositiveTaps,
+						monthlyNegativeTaps,
+						monthlyPositivePercent,
 					};
 				})
 			);
@@ -170,7 +211,7 @@ export default function PathwayBoard() {
 			const paddedStudents = Array.from({ length: 33 }, (_, i) => 
 				backendStudents[i] || {
 					id: i + 1,
-					name: `Student ${i + 1}`,
+					name: ``,
 					choices: [],
 					points: 0,
 					selected: false,
@@ -268,6 +309,8 @@ export default function PathwayBoard() {
 		11: require('./assets/images/december.png'),
 	};
 
+	const ebucksImage = require('./assets/images/ebucks.png');
+
 	const [characterTrait1, setCharacterTrait1] = useState('');
 	const [characterTrait2, setCharacterTrait2] = useState('');
 	const [equationResult, setEquationResult] = useState('');
@@ -284,6 +327,7 @@ export default function PathwayBoard() {
 
 	// Box color: selected previous trait's color, otherwise fall back to the current equation's color
 	const previousTraitBoxColor = selectedPreviousTrait?.color || equationBgColor;
+	const previousTraitDropColor = selectedPreviousTrait ? '#c8e6c9' : '#ffffff';
 
 
 	// Set character equation + previous traits based on current month
@@ -340,7 +384,21 @@ export default function PathwayBoard() {
 		'#d8b4e2',  // purple/violet
 	];
 
-	const isPositiveChoice = (choice: string) => choice.startsWith('+');
+	// Treat explicit + as positive, explicit - as negative,
+	// and treat monthly character equation traits as positive.
+	const isPositiveChoice = (choice: string) => {
+		if (choice.startsWith('+')) return true;
+		if (choice.startsWith('-')) return false;
+	
+		// Monthly character traits are always positive taps
+		if (choice === characterTrait1 || choice === characterTrait2) {
+		return true;
+		}
+	
+		// Fallback: any non-prefixed choice is considered positive
+		// (you can tighten this later if you ever add a true "neutral")
+		return true;
+	};
 
 	const recordTap = async (studentName: string, choice: string) => {
 	const tapType = isPositiveChoice(choice) ? 'positive' : 'negative';
@@ -360,6 +418,10 @@ export default function PathwayBoard() {
 	};
 
 	const handleChoiceClick = (choice: string) => {
+		if (selectedPreviousTraitKey !== null) {
+			setSelectedPreviousTraitKey(null);
+		}
+		
 		if (selectedChoice === choice) {
 			setSelectedChoice('');
 		} else {
@@ -368,53 +430,113 @@ export default function PathwayBoard() {
 	};
 
 	const selectAllStudents = () => {
+		if (!selectedChoice) return;
+	  
+		const isPositive = isPositiveChoice(selectedChoice);
+		const pointChange = isPositive ? 1 : -1;
+	  
+		setStudents((prev) =>
+		  prev.map((s) => {
+			if (
+				!s.name ||
+				s.name.trim() === '' ||
+				s.name === 'Photo Name' ||
+				s.name.startsWith('Student ')
+			  ) {
+				return s;
+			  }
+			
+			// If you want to skip certain placeholder names for town-hall stats,
+			// you can add checks here, but usually it's fine to include all.
+			const currentPos = s.monthlyPositiveTaps ?? 0;
+			const currentNeg = s.monthlyNegativeTaps ?? 0;
+	  
+			const newPos = currentPos + (isPositive ? 1 : 0);
+			const newNeg = currentNeg + (isPositive ? 0 : 1);
+			const total = newPos + newNeg;
+			const monthlyPositivePercent = total > 0 ? newPos / total : 0;
+	  
+			return {
+			  ...s,
+			  choices: [...s.choices, selectedChoice],
+			  points: (s.points || 0) + pointChange,
+			  recentChoice: selectedChoice,
+			  monthlyPositiveTaps: newPos,
+			  monthlyNegativeTaps: newNeg,
+			  monthlyPositivePercent,
+			};
+		  })
+		);
+	  
+		// keep your existing recordTap + timeout logic as-is
+		students.forEach((student) => {
+		  if (
+			student.name &&
+			student.name.trim() !== '' &&
+			student.name !== 'Photo Name' &&
+			!student.name.startsWith('Student ')
+		  ) {
+			recordTap(student.name, selectedChoice);
+		  }
+		});
+	  
+		setTimeout(() => {
+		  setStudents((prev) =>
+			prev.map((s) => ({ ...s, recentChoice: undefined }))
+		  );
+		}, 3000);
+	  };
+	  
+
+	const handleStudentClick = (studentId: number) => {
+		const target = students.find((s) => s.id === studentId);
+		if (
+			!target ||
+			!target.name ||
+			target.name.trim() === '' ||
+			target.name === 'Photo Name' ||
+			target.name.startsWith('Student ')
+		) {
+			return;
+		}
+		
 		if (selectedChoice) {
-			const pointChange = isPositiveChoice(selectedChoice) ? 1 : -1;
-      
+			const isPositive = isPositiveChoice(selectedChoice);
+			const pointChange = isPositive ? 1 : -1;
+
 			setStudents((prev) =>
-				prev.map((s) => ({
+				prev.map((s) => {
+					if (s.id !== studentId) return s;
+
+					const currentPos = s.monthlyPositiveTaps ?? 0;
+					const currentNeg = s.monthlyNegativeTaps ?? 0;
+
+					const newPos = currentPos + (isPositive ? 1 : 0);
+					const newNeg = currentNeg + (isPositive ? 0 : 1);
+					const total = newPos + newNeg;
+					const monthlyPositivePercent = total > 0 ? newPos / total : 0;
+
+					return {
 					...s,
 					choices: [...s.choices, selectedChoice],
 					points: (s.points || 0) + pointChange,
 					recentChoice: selectedChoice,
-				}))
-			);
-
-			students.forEach(student => {
-				if (student.name !== 'Photo Name' && !student.name.startsWith('Student ')) {
-				recordTap(student.name, selectedChoice);
-				}
-			});
-
-			setTimeout(() => {
-				setStudents((prev) =>
-					prev.map((s) => ({ ...s, recentChoice: undefined }))
-				);
-			}, 3000);
-		}
-	};
-
-	const handleStudentClick = (studentId: number) => {
-		if (selectedChoice) {
-			const pointChange = isPositiveChoice(selectedChoice) ? 1 : -1;
-      
-			setStudents((prev) =>
-				prev.map((s) => 
-					s.id === studentId 
-						? { 
-								...s, 
-								choices: [...s.choices, selectedChoice],
-								points: (s.points || 0) + pointChange,
-								recentChoice: selectedChoice,
-								showingScore: false
-							} 
-						: s
-				)
+					showingScore: false,
+					monthlyPositiveTaps: newPos,
+					monthlyNegativeTaps: newNeg,
+					monthlyPositivePercent,
+					};
+				})
 			);
 
 			// Record tap for this student
 			const student = students.find(s => s.id === studentId);
-			if (student && student.name !== 'Photo Name' && !student.name.startsWith('Student ')) {
+			if (
+				student && 
+				student.name.trim() !== '' &&
+				student.name !== 'Photo Name' && 
+				!student.name.startsWith('Student ')
+			) {
 				recordTap(student.name, selectedChoice);
 			}
 
@@ -560,11 +682,28 @@ export default function PathwayBoard() {
 						)}
             
 						{student.showingScore && (
-							<View style={styles.scoreOverlay}>
-								<Text style={[styles.scoreValue, { fontSize: fontSize * 2 }]}>
-									{displayPoints > 0 ? '+' : ''}{displayPoints}
-								</Text>
-							</View>
+						<View style={styles.scoreOverlay}>
+							<Text style={[styles.scoreValue, { fontSize: fontSize * 2 }]}>
+							{displayPoints > 0 ? '+' : ''}{displayPoints}
+							</Text>
+
+							{typeof student.monthlyPositivePercent === 'number' && (
+							<Text style={[styles.scoreSubtitle, { fontSize: fontSize * 0.9 }]}>
+								{(() => {
+								const totalMonthlyTaps =
+									(student.monthlyPositiveTaps || 0) +
+									(student.monthlyNegativeTaps || 0);
+
+								if (totalMonthlyTaps === 0) {
+									return 'No taps yet this month';
+								}
+
+								const pct = (student.monthlyPositivePercent || 0) * 100;
+								return `${pct.toFixed(0)}% positive this month`;
+								})()}
+							</Text>
+							)}
+						</View>
 						)}
 
 						{student.recentChoice && (
@@ -706,8 +845,36 @@ export default function PathwayBoard() {
 		} finally {
 			setGeneratingReport(false);
 		}
-	};
 
+	};
+	const downloadTownHallList = async () => {
+			try {
+			  const now = new Date();
+			  const currentMonth = now.toLocaleDateString('en-US', { month: 'long' });
+			  const currentYear = now.getFullYear();
+		
+			  const downloadUrl = `${API_URL}/reports/town-hall-list?month=${encodeURIComponent(
+				currentMonth
+			  )}&year=${currentYear}`;
+		
+			  // On web, just open the CSV in a new tab to trigger download
+			  if (typeof window !== 'undefined') {
+				window.open(downloadUrl, '_blank');
+			  } else {
+				// Fallback for native: at least show the URL
+				Alert.alert(
+				  'Town Hall List',
+				  `Download the town hall list from:\n${downloadUrl}`
+				);
+			  }
+			} catch (err: any) {
+			  console.error('Failed to start town hall list download', err);
+			  Alert.alert(
+				'Download Failed',
+				err?.message || 'Could not download town hall list.'
+			  );
+			}
+		  };
 	return (
 		<SafeAreaView style={styles.safeArea}>
 			<ScrollView 
@@ -821,6 +988,9 @@ export default function PathwayBoard() {
 												>
 													{positiveChoices[index]}
 												</Text>
+
+												{/* ebucks icon on far right, overlayed */}
+												<Image source={ebucksImage} style={styles.ebucksIcon} />
 											</Pressable>
 										</View>
 										<View style={styles.choiceCell}>
@@ -892,6 +1062,7 @@ export default function PathwayBoard() {
 													hovered && styles.dropdownSelectorHover,
 													hovered && styles.hoverShadow,
 													pressed && styles.pressed,
+													{ backgroundColor: previousTraitDropColor },
 												];
 											}}
 										>
@@ -908,7 +1079,7 @@ export default function PathwayBoard() {
 										{selectedPreviousTrait ? (
 										<View style={styles.previousTraitsSelectedInfo}>
 											<Text style={styles.previousTraitsSelectedText}>
-												Selected: {selectedPreviousTrait.label}
+												
 											</Text>
 											<Pressable
 												onPress={() => {
@@ -934,7 +1105,7 @@ export default function PathwayBoard() {
 										</View>
 									) : (
 										<Text style={styles.previousTraitsSelectedText}>
-											No previous trait selected.
+											
 										</Text>
 									)}
 
@@ -995,10 +1166,13 @@ export default function PathwayBoard() {
 																	style={(state) => {
 																		const { pressed } = state;
 																		const hovered = isHovered(state);
+
 																		const baseColor = trait.color;
 																		const defaultColor = lightenHexColor(baseColor, 0.18);
 																		const hoverColor = lightenHexColor(baseColor, 0.50);
-																		const selectedColor = lightenHexColor(baseColor, 0.65);
+
+																		const selectedColor = '#c8e6c9';
+																		
 																		const backgroundColor = isSelected
 																			? selectedColor
 																			: hovered
@@ -1089,6 +1263,8 @@ export default function PathwayBoard() {
 										>
 											{characterTrait1}
 										</Text>
+
+										<Image source={ebucksImage} style={styles.ebucksIcon} />
 										</Pressable>
 									</View>
 
@@ -1127,6 +1303,7 @@ export default function PathwayBoard() {
 										>
 											{characterTrait2}
 										</Text>
+										<Image source={ebucksImage} style={styles.ebucksIcon} />
 										</Pressable>
 									</View>
 
@@ -1155,6 +1332,11 @@ export default function PathwayBoard() {
 										>
 											{equationResult}
 										</Text>
+										{/* Two eBucks signs side by side on the far right */}
+										<View style={styles.resultEbucksContainer}>
+											<Image source={ebucksImage} style={styles.resultEbucksIcon} />
+											<Image source={ebucksImage} style={styles.resultEbucksIcon} />
+										</View>
 										</View>
 									</View>
 									</View>
@@ -1324,6 +1506,29 @@ export default function PathwayBoard() {
 									Generate Student Report
 								</Text>
 							</Pressable>
+							<Pressable
+								onPress={downloadTownHallList}
+								style={(state) => {
+									const { pressed } = state;
+									const hovered = isHovered(state);
+									return [
+									styles.settingsActionButton,
+									{ marginTop: 10, backgroundColor: '#2d5aa8' },
+									hovered && styles.hoverShadow,
+									pressed && styles.pressed,
+									];
+								}}
+								>
+								<Text
+									style={[
+									styles.settingsActionButtonText,
+									{ fontSize: headerFontSize * 0.9 },
+									]}
+								>
+									Download Town Hall List
+								</Text>
+							</Pressable>
+
 
 							<View style={styles.settingsDivider}>
 								<Text style={[styles.settingsText, { fontSize: headerFontSize * 0.9, marginBottom: 10, fontWeight: '700' }]}>Roster Management</Text>
@@ -1409,7 +1614,12 @@ export default function PathwayBoard() {
 
 							<ScrollView style={styles.studentListScroll} nestedScrollEnabled>
 								{students
-									.filter(s => s.name !== 'Photo Name' && !s.name.startsWith('Student '))
+									.filter(
+										s => 
+											s.name &&
+											s.name.trim() !== '' &&
+											s.name !== 'Photo Name' && 
+											!s.name.startsWith('Student '))
 									.map((student) => (
 										<Pressable
 											key={student.id}
