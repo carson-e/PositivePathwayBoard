@@ -166,7 +166,6 @@ export const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         borderRadius: 12,
-        // no border unless you explicitly want one
         },
     directionsBox: {
         backgroundColor: '#000',
@@ -252,14 +251,14 @@ export const styles = StyleSheet.create({
     },
     characterEquation: {
         flexDirection: 'row',
-        gap: 64,              // more space between equation + badge
+        gap: 64,             
         borderRadius: 16,
-        paddingVertical: 16,  // taller overall
+        paddingVertical: 16, 
         paddingHorizontal: 12,
         maxWidth: '100%',
         alignSelf: 'center',
         alignItems: 'flex-start',
-        marginLeft: 16,       // moves the whole block slightly to the right
+        marginLeft: 16,    
     },
 
     equationHeader: {
@@ -282,7 +281,7 @@ export const styles = StyleSheet.create({
     equationRowWithSign: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',  // center the sign + box row
+        justifyContent: 'center',  
         marginBottom: 10,
         gap: 8,
     },
@@ -479,7 +478,7 @@ export const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 16, // space between previous-traits box and equation card
+        gap: 16, 
     },
     
     previousTraitsContainer: {
