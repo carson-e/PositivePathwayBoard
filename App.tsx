@@ -26,7 +26,6 @@ type Student = {
 	// monthly behavior stats (for town hall eligibility)
 	monthlyPositiveTaps?: number;
 	monthlyNegativeTaps?: number;
-	/** 0–1 fraction of positive taps this month */
 	monthlyPositivePercent?: number;
 };
 
@@ -226,8 +225,6 @@ export default function PathwayBoard() {
 		}
 	};
 
-	// Remove automatic fetch on mount. Only fetch after updateRoster.
-
 	// Monthly character equation configuration
 	const monthlyEquations: Record<number, MonthlyEquation> = {
 		0: { trait1: 'Goodness', trait2: 'Skills', result: 'Ability', color: '#ffcdd2', badge_image: 0, videoUrl: ''}, // January (red)
@@ -237,14 +234,14 @@ export default function PathwayBoard() {
 		4: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // May (none) 
 		5: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 3, videoUrl: '' }, // June (none)
 		6: { trait1: '', trait2: '', result: '', color: '#fef8dc', badge_image: 7, videoUrl: '' }, // July (none)
-		7: { trait1: 'Helpfulness', trait2: 'Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: 7, videoUrl: '' }, // August (yellow)
-		8: { trait1: 'Care', trait2: 'Safety', result: 'Stability', color: '#d9e2f7', badge_image: 8, videoUrl: '' }, // September (blue)
-		9: { trait1: 'Joy', trait2: 'Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: 9, videoUrl: 'https://www.youtube.com/watch?v=fLtcRZJQCJk' }, // October (red)
-		10: { trait1: 'Patience', trait2: 'Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: 10, videoUrl: 'https://www.youtube.com/watch?v=8CoPIRFroPM' }, // November (yellow)
-		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: 'https://www.youtube.com/watch?v=-_XVPoSm3i4' }, // December (blue)
+		7: { trait1: 'Helpfulness', trait2: 'Organization', result: 'Learning Environment', color: '#fff9c4', badge_image: 7, videoUrl: 'https://www.youtube.com/watch?v=f9SUUBvOW6o' }, // August (yellow)
+		8: { trait1: 'Care', trait2: 'Safety', result: 'Stability', color: '#d9e2f7', badge_image: 8, videoUrl: 'https://www.youtube.com/watch?v=-lWm_cQDeVk&pp=0gcJCSgKAYcqIYzv' }, // September (blue)
+		9: { trait1: 'Joy', trait2: 'Focus', result: 'Learning Energy', color: '#ffcdd2', badge_image: 9, videoUrl: 'https://www.youtube.com/watch?v=Hr8Ei38RmRg&pp=0gcJCSgKAYcqIYzv' }, // October (red)
+		10: { trait1: 'Patience', trait2: 'Excellent Senses', result: 'Perception', color: '#fff9c4', badge_image: 10, videoUrl: 'https://www.youtube.com/watch?v=_MJCHSVI35U' }, // November (yellow)
+		11: { trait1: 'Kindness', trait2: 'Understanding', result: 'Responsibility', color: '#d9e2f7', badge_image: 11, videoUrl: 'https://www.youtube.com/watch?v=X9Np9-06Ils' }, // December (blue)
 	};
 
-	const SCHOOL_YEAR_START_MONTH = 7; // 0 = January, so 7 = August
+	const SCHOOL_YEAR_START_MONTH = 7; 
 	
 	type TraitCategory = 'Health' | 'Liberty' | 'Happiness' | 'Other';
 	
@@ -272,11 +269,11 @@ export default function PathwayBoard() {
 		while (m !== currentMonth) {
 			const cfg = monthly[m];
 			if (cfg) {
-				// "First two traits" → trait1 and trait2, but skip blanks
+				// first two traits included from previous months' character equations
 				if (cfg.trait1) {
 					result.push({
 						key: `${m}-trait1`,
-						label: cfg.trait1,  // uses month NUMBER
+						label: cfg.trait1, 
 						monthIndex: m,
 						color: cfg.color,
 					});
@@ -284,7 +281,7 @@ export default function PathwayBoard() {
 				if (cfg.trait2) {
 					result.push({
 						key: `${m}-trait2`,
-						label: cfg.trait2,  // uses month NUMBER
+						label: cfg.trait2, 
 						monthIndex: m,
 						color: cfg.color,
 					});
@@ -396,7 +393,6 @@ export default function PathwayBoard() {
 		}
 	
 		// Fallback: any non-prefixed choice is considered positive
-		// (you can tighten this later if you ever add a true "neutral")
 		return true;
 	};
 
@@ -446,8 +442,6 @@ export default function PathwayBoard() {
 				return s;
 			  }
 			
-			// If you want to skip certain placeholder names for town-hall stats,
-			// you can add checks here, but usually it's fine to include all.
 			const currentPos = s.monthlyPositiveTaps ?? 0;
 			const currentNeg = s.monthlyNegativeTaps ?? 0;
 	  
@@ -468,7 +462,7 @@ export default function PathwayBoard() {
 		  })
 		);
 	  
-		// keep your existing recordTap + timeout logic as-is
+		// keep existing recordTap + timeout logic as-is
 		students.forEach((student) => {
 		  if (
 			student.name &&
@@ -798,7 +792,7 @@ export default function PathwayBoard() {
 			const currentMonth = now.toLocaleDateString('en-US', { month: 'long' });
 			const currentYear = now.getFullYear();
 	
-			// Use the same monthlyEquations data you already have
+			// Use the same monthlyEquations data 
 			const monthIndex = now.getMonth();
 			const monthConfig = monthlyEquations[monthIndex];
 	
@@ -1150,7 +1144,7 @@ export default function PathwayBoard() {
 																<Pressable
 																	key={trait.key}
 																	onPress={() => {
-																		const newChoice = `+ ${trait.label}`; // ALWAYS POSITIVE
+																		const newChoice = `+ ${trait.label}`;
 
 																		setSelectedPreviousTraitKey((prevKey) =>
 																			prevKey === trait.key ? null : trait.key
@@ -1771,4 +1765,3 @@ export default function PathwayBoard() {
 		</SafeAreaView>
 	);
 }
-
