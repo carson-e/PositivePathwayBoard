@@ -1,3 +1,7 @@
+#File written by Gemini to allow command line interaction with the DB. 
+#We were able to use this to verify changes happening to the DB in real time
+#like we could with a server hosted SQL product
+
 import sqlite3 as sq
 import pandas as pd
 

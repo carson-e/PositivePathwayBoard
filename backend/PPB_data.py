@@ -1,3 +1,4 @@
+# This file is no longer important. Was initially a proof of concept, now depricated
 import pandas as pd
 import numpy as np
 import datetime as dt
@@ -52,7 +53,4 @@ def load_df(filepath):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
-
-
-#load_df(r"C:\Users\oakes\Desktop\StdInfo.xlsx")
 #Modify filepath as needed

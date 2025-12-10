@@ -461,7 +461,7 @@ export const styles = StyleSheet.create({
         borderRadius: 15,
         paddingVertical: 8,
         paddingHorizontal: 12,
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: '#000',
         alignItems: 'center',
     },

@@ -1,3 +1,5 @@
+#This is the meat of the backend functions
+
 import sqlite3 as sq
 import pandas as pd
 import json
@@ -13,13 +15,7 @@ def connect_db(db_name):
 def load_df(filepath):
     """Loads all sheets from an Excel file and processes them."""
     try:
-        # Load all sheets into a dictionary of DataFrames
-        # roster_full = pd.read_excel(filepath, usecols='A:I', header=0, sheet_name=None)
-
-        # Load teacher data from the first sheet
-        # teacherData = pd.read_excel(filepath, usecols='G:J', header=0, sheet_name=0)
-
-        # First, try to load with original column spec (A:I)
+        
         try:
             # Load student data from columns A:H
             roster_full = pd.read_excel(filepath, usecols='A:H', header=0, sheet_name=None)
@@ -45,7 +41,6 @@ def load_df(filepath):
                     df.columns = col_names[:len(df.columns)]
                     roster_full[sheet_name] = df
 
-        # --- THIS IS THE FIX ---
         # Create a new dictionary to store the processed DataFrames
         roster_processed = {}
         teacher_info = {"Teacher Name": None, "Grade": None}
@@ -95,7 +90,7 @@ def load_df(filepath):
 
             print("  Data processed successfully.")
             print(roster_processed[sheet_name].head())
-        # --- END OF FIX ---
+      
 
         print("\nTeacher Data:\n", teacherData.head() if not teacherData.empty else "No teacher data")
         print("Teacher Info:", teacher_info)
@@ -172,8 +167,7 @@ def populate_db(db_name, data, conn=None, cur=None, teacher_info=None, clear_fir
         for sheet_name, df in data.items():
             print(f"Inserting data from sheet into table: {sheet_name}")
             
-            # Recommendation: Use 'replace' to avoid duplicating data
-            # if you run the script multiple times.
+            # Use 'replace' to avoid duplicating data
             # 'append' will just add the same data again.
             df.to_sql(sheet_name, conn, if_exists='replace', index=False)
             
@@ -255,9 +249,8 @@ def push_db(db_name, table_name, conn = None, cur = None):
     finally:
         if close_end:
             conn.close()
-#writes taps, record keeping per student, not quite persistent
 
-
+#testing to ensure it works
 if __name__ == "__main__":
     
     # build_table()
