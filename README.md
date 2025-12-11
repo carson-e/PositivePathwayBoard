@@ -1,157 +1,253 @@
 # PositivePathwayBoard
 
-A smart classroom tool that tracks and reports student effort and positive choices in real time. Teachers can quickly record data, view trends, and share progress, all through an intuitive, mobile-friendly web UI.
+A classroom behavioral management system that tracks student positive and negative interactions ("taps"), displays real-time point totals, generates monthly character trait equations, and produces detailed PDF progress reports. Teachers can manage multiple class rosters, record behavioral data efficiently, and identify students eligible for recognition events.
 
 ## Overview
 
-- Frontend: Expo + React Native (web via react-native-web) in the repository root (`app/…`).
-- Backend: FastAPI server under `backend/server.py`, with SQLite for storage and `pandas`/`openpyxl` to ingest Excel rosters.
-- Data flow: The frontend calls the backend at `${EXPO_PUBLIC_API_URL}` for:
-	- `POST /update-roster` — load/refresh students from the Excel file into SQLite
-	- `GET /students?limit=33` — list students to render tiles (defaults to 33)
+**Architecture:**
+- **Frontend**: React Native + Expo (web via react-native-web) with TypeScript
+- **Backend**: FastAPI + SQLite with behavioral tracking and PDF report generation
+- **Data Pipeline**: Excel roster import via pandas/openpyxl → SQLite → REST API → React UI
 
-Key files:
+**Key Features:**
+- **Behavioral Tracking**: Record positive/negative taps across 4 PAWS categories (Prepared for Learning, Acting Responsibly, Working Respectfully, Solving Problems)
+- **Real-time Scoring**: Dynamic point calculations (positive - negative taps) displayed on student tiles
+- **Monthly Character Equations**: Rotating trait combinations (e.g., "Goodness + Skills = Ability") with video content
+- **PDF Reports**: ReportLab-generated monthly progress reports with tap analytics and character traits
+- **Multi-Class Support**: Switch between different classroom rosters (Sheet1, Sheet2, etc.)
+- **Town Hall Eligibility**: Filter students meeting positive behavior thresholds (≥95% positive taps)
 
-- Frontend screen: `app/(tabs)/index.tsx`
-- Backend app: `backend/server.py`
-- Excel loader: `backend/PPB_DB.py`
-- Python dependencies: `backend/requirements.txt`
+**Core Files:**
+- Frontend: `App.tsx`, `App.styles.ts`, `index.tsx`
+- Backend: `backend/server.py`, `backend/PPB_DB.py`, `backend/tap_tracker.py`, `backend/generate_reports.py`
+- Database: `roster.db` (SQLite with roster, taps, metadata tables)
+- Dependencies: `backend/requirements.txt`, `package.json`
 
 ## Prerequisites
 
-- Node.js 20+ and npm 10+
-- Python 3.10+ with `pip`
-- Excel file (.xlsx) to serve as the roster, or use the included `sample_data.xlsx`
+- **Node.js** 20+ and npm 10+ (for frontend)
+- **Python** 3.10+ with pip (for backend)
+- **System libraries** (for ReportLab C extensions):
+  - Debian/Ubuntu: `sudo apt-get install -y build-essential pkg-config python3-dev libfreetype6-dev libjpeg-dev zlib1g-dev libpng-dev`
+  - macOS: `brew install freetype libjpeg zlib libpng pkg-config`
+- **Excel roster file** (.xlsx) with student data (or use `StdInfo.xlsx` / `sample_data.xlsx` in repo root)
 
-## Backend (FastAPI) — setup and run
+## Backend (FastAPI) — Setup and Run
 
-1) Create and activate a virtual environment (tcsh):
+### 1. Create and activate virtual environment
 
-```tcsh
+**bash/zsh:**
+```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate.csh
+source .venv/bin/activate
 ```
 
-2) Install dependencies:
+### 2. Install Python dependencies
 
-```tcsh
+```bash
 pip install -r requirements.txt
 ```
 
-3) Point the server at your roster Excel file (absolute path recommended). By default it tries `StdInfo.xlsx` in the repo root; you can override with an env var:
+### 3. Configure roster Excel path
 
-```tcsh
-setenv ROSTER_EXCEL "/absolute/path/to/your_roster.xlsx"
-```
-
-OR (for bash)
+Set the absolute path to your Excel roster file (defaults to `../StdInfo.xlsx`):
 
 ```bash
-export ROSTER_EXCEL="/absolute/path/to/your_roster.xlsx"
+export ROSTER_EXCEL="/absolute/path/to/StdInfo.xlsx"
 ```
 
-4) Start the API server:
+### 4. Start the API server
 
-```tcsh
+```bash
 uvicorn server:app --reload --host 127.0.0.1 --port 8000
 ```
+Server runs at `http://127.0.0.1:8000` with auto-reload enabled.
 
-5) Health check (optional):
+### 5. Verify backend health (optional)
 
-```tcsh
+```bash
 curl http://127.0.0.1:8000/health
+# Expected: {"status":"ok"}
 ```
 
-Notes:
+### API Endpoints Overview
 
-- The API includes CORS with permissive settings for local development.
-- The `/update-roster` endpoint accepts preflight OPTIONS and a POST from the frontend.
-- The Excel loader in `PPB_DB.py` is resilient to header/column variations, but a clean header row helps (e.g., first name, last name, contacts, etc.).
+**Roster Management:**
+- `POST /update-roster` — Refresh student data from Excel (preserves taps table)
+- `POST /populate-roster` — **RESET**: Clear all tables including taps, repopulate from Excel
+- `GET /students?limit=33` — Fetch student records (filtered by class table)
+- `GET /teacher-info` — Retrieve teacher name and grade from metadata
 
-## Frontend (Expo web) — setup and run
+**Behavioral Tracking:**
+- `POST /taps/record` — Record single tap (body: `{student_name, tap_type, choice}`)
+- `POST /taps/batch` — Record multiple taps
+- `GET /taps/student/{name}?month=November&year=2025` — Student tap summary
+- `GET /taps/all?month=November&year=2025` — All students tap data
 
-1) From the repository root, install dependencies:
+**Reports:**
+- `POST /reports/generate` — Generate PDF report (body: `{student_name, month, year, character_equations}`)
+- `GET /reports/download/{filename}` — Download PDF report
+- `GET /reports/town-hall-list?threshold=95` — Students ≥95% positive taps (eligible for recognition)
+- `GET /reports/student-report?student={name}&month={month}&year={year}&format=csv` — Download CSV tap data
 
-```tcsh
+### Backend Notes
+
+- **CORS**: Permissive settings for local development (`allow_origins=["*"]`). Tighten for production.
+- **Database**: `roster.db` created automatically with three main tables:
+  - Student roster tables (e.g., `Sheet1`, `Sheet2`)
+  - `taps` — behavioral tracking with timestamps
+  - `metadata` — teacher name, grade
+- **Excel Format**: Expects columns A-H for student data, I-L for teacher info (Teacher Name, Grade, Room Number in first row)
+
+## Frontend (Expo Web) — Setup and Run
+
+### 1. Install dependencies
+
+From repository root:
+
+```bash
 npm install
 ```
 
-2) Tell the frontend where the backend lives (defaults to `http://127.0.0.1:8000` if not set).
+### 2. Configure backend URL
 
-```tcsh
-setenv EXPO_PUBLIC_API_URL "http://127.0.0.1:8000"
-```
-
-OR (for bash)
-
+Set the backend API endpoint (defaults to `http://127.0.0.1:8000`):
 ```bash
 export EXPO_PUBLIC_API_URL="http://127.0.0.1:8000"
 ```
 
-3) Start the web dev server (either):
+### 3. Start the development server
 
+**Option A: Expo CLI (recommended)**
 ```bash
-# Option A: Expo CLI
 npx expo start --web
+```
 
-# Option B: if a start script exists
+**Option B: npm script**
+```bash
 npm run web
 ```
 
-4) Open the app in the browser and use the Settings panel to press "Update Roster". After a successful update, student tiles are fetched via `/students` on next load. You can refresh the page to see the latest names.
+Web app opens at `http://localhost:<port>`. 
 
-## Environment variables (tcsh)
+### 4. Initial data load
 
-- Backend:
-	- `ROSTER_EXCEL` — absolute path to the Excel roster file (e.g., `/home/you/projects/PositivePathwayBoard/sample_data.xlsx`).
-- Frontend:
-	- `EXPO_PUBLIC_API_URL` — base URL for the backend (e.g., `http://127.0.0.1:8000`).
+1. Click the **⚙️ Settings** button (top-right)
+2. Choose action:
+   - **Update Roster** — Refresh student names/teacher info from database (keeps tap data)
+   - **RESET** (red button) — Complete fresh start from Excel (⚠️ deletes all tap data)
+   - **Select Class Table** — Switch between Sheet1, Sheet2, etc.
+3. Close settings to view student grid
 
-Set them with tcsh:
+### Frontend Features
 
-```tcsh
-setenv ROSTER_EXCEL "/absolute/path/to/your_roster.xlsx"
-setenv EXPO_PUBLIC_API_URL "http://127.0.0.1:8000"
-```
+**Student Grid:**
+- 33 student tiles arranged in pyramid (1 → 2 → 3 → 4 → 5 → 6 → 7 → 8)
+- Click tile without selection: show point total (3 seconds)
+- Click tile with PAWS choice selected: record tap, flash choice label (3 seconds)
+- Real-time point updates via async tap fetching
 
-OR (for bash)
+**PAWS Choice Recording:**
+- 4 categories × 2 types (positive/negative) = 8 tap buttons
+- Color-coded: Yellow (Prepared), Blue (Acting/Working), Red (Solving)
+- "Select All Students" tile applies choice to entire class
+
+**Monthly Character Equation:**
+- Auto-updates based on current month (January–December)
+- Three trait tiles (clickable to record positive taps for character traits)
+- Optional video link icon (if `videoUrl` set in `monthlyEquations`)
+- Previous month traits carousel
+
+**Town Hall Popup:**
+- Shows students with ≥95% positive taps this month (default threshold)
+- Green highlight on student tiles meeting criteria
+- Click student in popup → opens detailed report modal
+
+**Reports:**
+- Generate PDF for individual student (Settings → Generate Student Report)
+- Download CSV tap data per student
+- View tap counts, positive percentage, monthly trends
+
+## Environment Variables
+
+**Backend:**
+- `ROSTER_EXCEL` — Absolute path to Excel roster file (defaults to `../StdInfo.xlsx`)
+
+**Frontend:**
+- `EXPO_PUBLIC_API_URL` — Backend API base URL (defaults to `http://127.0.0.1:8000`)
 
 ```bash
-export ROSTER_EXCEL="/absolute/path/to/your_roster.xlsx"
+export ROSTER_EXCEL="/absolute/path/to/StdInfo.xlsx"
 export EXPO_PUBLIC_API_URL="http://127.0.0.1:8000"
 ```
 
+> **Tip**: Add these to your shell config (`~/.bashrc`, `~/.zshrc`, `~/.tcshrc`) to persist across sessions.
+
 ## Troubleshooting
 
-- Backend won’t start or Excel parsing fails:
-	- Ensure the file is `.xlsx` and readable; `openpyxl` must be installed (included in `requirements.txt`).
-	- Try setting `ROSTER_EXCEL` to an absolute path.
-	- Check server logs for detailed errors.
+### Backend Issues
 
-- Frontend can’t reach the API:
-	- Confirm the backend is running on `127.0.0.1:8000` (or update `EXPO_PUBLIC_API_URL`).
-	- Open the browser console/network tab to verify requests and CORS headers.
+**ReportLab build failure ("ft2build.h: No such file or directory")**
+- Install system development packages (see Prerequisites)
+- Upgrade pip/setuptools/wheel before installing: `pip install --upgrade pip setuptools wheel`
+- If still failing, try: `pip install reportlab --no-cache-dir`
 
-- Preflight/CORS issues:
-	- The server enables CORS for development and explicitly handles `OPTIONS /update-roster`. If you change ports/origins, verify both sides use the same base URL.
+**Python.h missing during pip install**
+- Install python3-dev (Debian/Ubuntu: `python3-dev`, Fedora: `python3-devel`)
 
-- Dependency/version warnings in the frontend:
-	- You can run `npx expo install` to align versions where possible, or reinstall with legacy peer deps: `npm install --legacy-peer-deps`.
+**Excel parsing errors**
+- Ensure file is `.xlsx` format (not `.xls` or `.csv`)
+- Verify columns A-H contain student data, I-L contain teacher info
+- Set `ROSTER_EXCEL` to absolute path
+- Check backend terminal for detailed `openpyxl` error messages
 
-## Project structure (partial)
+**Backend won't start**
+- Verify virtual environment activated (`which python` should show `.venv/bin/python`)
+- Check uvicorn version: `uvicorn --version` (expecting 0.32.0+)
+- Test server manually: `python -c "from server import app; print('OK')"`
 
-```
-PositivePathwayBoard/
-	app/(tabs)/index.tsx          # Main screen (Expo Router)
-	backend/
-		server.py                   # FastAPI app
-		PPB_DB.py                   # Excel -> SQLite loader
-		requirements.txt            # Python deps
-	README.md                     # This file
-```
+### Frontend Issues
+
+**API connection failures**
+- Confirm backend running: `curl http://127.0.0.1:8000/health` should return `{"status":"ok"}`
+- Check `EXPO_PUBLIC_API_URL` matches backend address (including port)
+- Open browser DevTools → Network tab to inspect failed requests
+- Verify CORS headers in response (backend allows `*` in dev mode)
+
+**CORS preflight errors**
+- Backend explicitly handles `OPTIONS` requests for all endpoints
+- If changing ports/origins, ensure both frontend and backend use same base URL
+- Check browser console for specific CORS error messages
+
+**Students not loading after "Update Roster"**
+- Verify `/update-roster` returned HTTP 200 (check Network tab)
+- Confirm database has student records: `sqlite3 backend/roster.db "SELECT COUNT(*) FROM Sheet1;"`
+- Refresh page after roster update to fetch new data
+- Check class table selection dropdown (may be on Sheet2, not Sheet1)
+
+**Dependency version warnings**
+- Run `npx expo install` to align package versions
+- If conflicts persist: `rm -rf node_modules package-lock.json && npm install --legacy-peer-deps`
+
+### Data Issues
+
+**Tap data disappeared**
+- Check if "RESET" button was used (deletes taps table permanently)
+- Use "Update Roster" instead to preserve tap history
+- Restore from backup: `cp roster.db.backup backend/roster.db`
+
+**Town Hall list empty**
+- Verify students have tap data for current month: `GET /taps/all?month=December&year=2025`
+- Check threshold parameter (default 95%): `GET /reports/town-hall-list?threshold=90`
+- Ensure positive tap percentage calculation working (requires both positive and negative taps)
+
+**PDF report generation fails**
+- Confirm ReportLab installed: `python -c "import reportlab; print(reportlab.Version)"`
+- Check student name exists in database
+- Verify `month` and `year` parameters match tap data
+- Check backend terminal for detailed error traceback
 
 ## Notes
 
 - Student tile count currently targets 33 tiles. Adjust via the `limit` parameter in `/students` or in the frontend state handling if needed.
-- For production, tighten CORS and consider authentication before enabling roster updates.
